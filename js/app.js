@@ -707,6 +707,52 @@ function addLinkItems(text){
   return { n, bad };
 }
 
+/* ---------- 드라이브 폴더 통째로 가져오기 ---------- */
+const getDriveKey = () => (localStorage.getItem('ex_drivekey_' + slug(state.config.title)) || '').trim();
+function driveFolderId(url){
+  const m = String(url || '').match(/\/folders\/([\w-]+)/) || String(url || '').match(/[?&]id=([\w-]+)/);
+  return m ? m[1] : null;
+}
+async function importDriveFolder(){
+  const folderUrl = $('#driveFolderInput').value.trim();
+  const keyInput = $('#driveKeyInput').value.trim();
+  const key = keyInput || getDriveKey();
+  const fid = driveFolderId(folderUrl);
+  if (!fid){ toast('드라이브 폴더 링크를 입력해 주세요'); return; }
+  if (!key){ toast('Drive API 키를 입력해 주세요 (위 안내 참고)'); return; }
+  toast('폴더를 읽는 중…');
+  try{
+    const q = encodeURIComponent(`'${fid}' in parents and trashed=false`);
+    const r = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)&pageSize=100&orderBy=name&key=${encodeURIComponent(key)}`);
+    if (r.status === 400 || r.status === 403) throw new Error('key');
+    if (!r.ok) throw new Error('api');
+    const data = await r.json();
+    const files = (data.files || []).filter(f => /^(image|video)\//.test(f.mimeType || ''));
+    if (!files.length){ toast('폴더에 사진·영상이 없어요. 폴더 공유 설정을 확인해 주세요'); return; }
+    localStorage.setItem('ex_drivekey_' + slug(state.config.title), key);
+    for (const f of files){
+      const isVideo = (f.mimeType || '').startsWith('video');
+      state.items.push({
+        id: 'w' + (++state.seq),
+        name: f.name, title: prettyTitle(f.name), desc: '',
+        url: isVideo
+          ? `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media&key=${encodeURIComponent(key)}`
+          : `https://drive.google.com/thumbnail?id=${f.id}&sz=w1920`,
+        type: isVideo ? 'video' : 'image', source: 'drive',
+      });
+    }
+    $('#driveFolderInput').value = '';
+    $('#linkModal').hidden = true;
+    renderAll();
+    toast(`${files.length}점을 가져왔어요`);
+  }catch(e){
+    toast(e.message === 'key'
+      ? 'API 키가 올바르지 않아요. 키를 확인해 주세요'
+      : '폴더를 읽지 못했어요. 폴더가 "링크가 있는 모든 사용자"로 공유되어 있는지 확인해 주세요');
+  }
+}
+
 /* ---------- 드래그앤드롭 ---------- */
 function setupDrop(){
   let depth = 0;
@@ -741,16 +787,25 @@ function init(){
   $('#btnDemo').addEventListener('click', loadDemo);
   $('#btnEmptyDemo').addEventListener('click', loadDemo);
 
-  $('#btnLink').addEventListener('click', () => { $('#linkModal').hidden = false; });
+  $('#btnLink').addEventListener('click', () => {
+    $('#driveKeyInput').value = getDriveKey();
+    $('#linkModal').hidden = false;
+  });
   $('#btnLinkClose').addEventListener('click', () => $('#linkModal').hidden = true);
   $('#linkModal').addEventListener('click', e => { if (e.target.id === 'linkModal') e.target.hidden = true; });
   $('#btnLinkAdd').addEventListener('click', () => {
-    const { n, bad } = addLinkItems($('#linkInput').value);
+    const raw = $('#linkInput').value;
+    if (/\/drive\/folders\//.test(raw)){
+      toast('폴더 링크는 아래 "📁 드라이브 폴더 통째로"에서 가져와 주세요');
+      return;
+    }
+    const { n, bad } = addLinkItems(raw);
     $('#linkInput').value = '';
     $('#linkModal').hidden = true;
     if (n){ renderAll(); toast(`${n}점을 가져왔어요${bad ? ` (${bad}개 인식 실패)` : ''}`); }
     else toast('가져올 수 있는 링크가 없어요');
   });
+  $('#btnFolderAdd').addEventListener('click', importDriveFolder);
 
   $('#btnCriteria').addEventListener('click', openCriteriaModal);
   $('#btnCritClose').addEventListener('click', () => $('#criteriaModal').hidden = true);

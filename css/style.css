@@ -194,6 +194,15 @@ body.dark .modal-card textarea{background:#0e0e10;border-color:#2c2c33;color:#e8
 .modal-actions{display:flex;gap:8px;margin-top:16px}
 .spacer{flex:1}
 .btn.sm{padding:8px 14px;font-size:13px}
+.textin{
+  width:100%;border:1px solid #d8d2c4;border-radius:8px;padding:10px 12px;
+  font-family:inherit;font-size:13px;margin-bottom:8px;background:#fff;color:var(--ink);outline:none;
+}
+.textin:focus{border-color:var(--accent)}
+body.dark .textin{background:#0e0e10;border-color:#2c2c33;color:#e8e6e0}
+.sep{border:none;border-top:1px solid var(--line);margin:16px 0}
+.hint.small{font-size:12px}
+.hint a{color:var(--accent)}
 
 /* ---------- 전시 기준 바 ---------- */
 .criteria{
