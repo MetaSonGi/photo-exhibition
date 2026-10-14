@@ -713,6 +713,14 @@ function driveFolderId(url){
   const m = String(url || '').match(/\/folders\/([\w-]+)/) || String(url || '').match(/[?&]id=([\w-]+)/);
   return m ? m[1] : null;
 }
+async function listDriveChildren(fid, key){
+  const q = encodeURIComponent(`'${fid}' in parents and trashed=false`);
+  const r = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)&pageSize=100&orderBy=name&key=${encodeURIComponent(key)}`);
+  if (r.status === 400 || r.status === 403) throw new Error('key');
+  if (!r.ok) throw new Error('api');
+  return (await r.json()).files || [];
+}
 async function importDriveFolder(){
   const folderUrl = $('#driveFolderInput').value.trim();
   const keyInput = $('#driveKeyInput').value.trim();
@@ -722,20 +730,25 @@ async function importDriveFolder(){
   if (!key){ toast('Drive API 키를 입력해 주세요 (위 안내 참고)'); return; }
   toast('폴더를 읽는 중…');
   try{
-    const q = encodeURIComponent(`'${fid}' in parents and trashed=false`);
-    const r = await fetch(
-      `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,mimeType)&pageSize=100&orderBy=name&key=${encodeURIComponent(key)}`);
-    if (r.status === 400 || r.status === 403) throw new Error('key');
-    if (!r.ok) throw new Error('api');
-    const data = await r.json();
-    const files = (data.files || []).filter(f => /^(image|video)\//.test(f.mimeType || ''));
-    if (!files.length){ toast('폴더에 사진·영상이 없어요. 폴더 공유 설정을 확인해 주세요'); return; }
+    const media = [];
+    async function walk(id, depth, path){
+      if (depth > 2 || media.length >= 150) return;
+      const children = await listDriveChildren(id, key);
+      for (const f of children){
+        if (/^(image|video)\//.test(f.mimeType || '')) media.push({ ...f, path });
+        else if (f.mimeType === 'application/vnd.google-apps.folder' && depth < 2)
+          await walk(f.id, depth + 1, f.name);
+      }
+    }
+    await walk(fid, 0, '');
+    if (!media.length){ toast('폴더에 사진·영상이 없어요. 폴더 공유 설정을 확인해 주세요'); return; }
     localStorage.setItem('ex_drivekey_' + slug(state.config.title), key);
-    for (const f of files){
+    for (const f of media){
       const isVideo = (f.mimeType || '').startsWith('video');
+      const title = f.path ? `${f.path} — ${prettyTitle(f.name)}` : prettyTitle(f.name);
       state.items.push({
         id: 'w' + (++state.seq),
-        name: f.name, title: prettyTitle(f.name), desc: '',
+        name: f.name, title, desc: '',
         url: isVideo
           ? `https://www.googleapis.com/drive/v3/files/${f.id}?alt=media&key=${encodeURIComponent(key)}`
           : `https://drive.google.com/thumbnail?id=${f.id}&sz=w1920`,
@@ -745,7 +758,7 @@ async function importDriveFolder(){
     $('#driveFolderInput').value = '';
     $('#linkModal').hidden = true;
     renderAll();
-    toast(`${files.length}점을 가져왔어요`);
+    toast(`${media.length}점을 가져왔어요`);
   }catch(e){
     toast(e.message === 'key'
       ? 'API 키가 올바르지 않아요. 키를 확인해 주세요'
