@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>사진전시관</title>
+<meta name="description" content="사진을 거는 다섯 개의 방 — 화이트큐브·다크룸·3D 전시관·프로젝터·매거진">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/moonspam/NanumSquare@2.0/nanumsquare.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <h1 id="exTitle" contenteditable="true" spellcheck="false" title="클릭해서 전시 제목 수정">사진전시관</h1>
+    <p id="exSubtitle">다섯 개의 방에 거는 사진들</p>
+  </div>
+  <div class="top-actions">
+    <button class="btn primary" id="btnFolder">📁 폴더 열기</button>
+    <button class="btn ghost" id="btnFiles">＋ 파일 추가</button>
+    <button class="btn ghost" id="btnDemo">✨ 데모 전시</button>
+  </div>
+</header>
+<input type="file" id="folderInput" webkitdirectory multiple hidden>
+<input type="file" id="fileInput" accept="image/*,video/*" multiple hidden>
+
+<nav class="styleswitch" id="styleSwitch">
+  <button data-style="whitecube" class="active">⬜ 화이트큐브</button>
+  <button data-style="darkroom">🌑 다크룸</button>
+  <button data-style="walkthrough">🚶 3D 전시관</button>
+  <button data-style="projector">📽️ 프로젝터</button>
+  <button data-style="magazine">📰 매거진</button>
+</nav>
+
+<main id="gallery" class="gallery"></main>
+
+<div class="empty" id="emptyState">
+  <div class="empty-art">🖼️</div>
+  <h2>전시할 사진을 걸어주세요</h2>
+  <p>사진이 담긴 <b>폴더 하나</b>를 열면<br>다섯 개의 전시실이 열립니다.</p>
+  <div class="empty-btns">
+    <button class="btn primary" id="btnEmptyFolder">📁 폴더 열기</button>
+    <button class="btn ghost" id="btnEmptyDemo">✨ 데모 전시 보기</button>
+  </div>
+  <p class="empty-note">파일은 서버로 전송되지 않고 브라우저 안에서만 열립니다</p>
+</div>
+
+<div class="lightbox" id="lightbox" hidden>
+  <button class="lb-close btn icon" id="lbClose">✕</button>
+  <button class="lb-nav prev btn icon" id="lbPrev">‹</button>
+  <button class="lb-nav next btn icon" id="lbNext">›</button>
+  <figure class="lb-figure">
+    <div class="lb-media" id="lbMedia"></div>
+    <figcaption class="lb-caption">
+      <h3 id="lbTitle"></h3>
+      <p class="lb-meta" id="lbMeta"></p>
+      <p class="lb-desc" id="lbDesc"></p>
+    </figcaption>
+  </figure>
+</div>
+
+<div class="projector" id="projector" hidden>
+  <div class="pj-grain"></div>
+  <div class="pj-stage" id="pjStage"></div>
+  <div class="pj-bar">
+    <div class="pj-caption"><h3 id="pjTitle"></h3><p id="pjMeta"></p></div>
+    <div class="pj-controls">
+      <button class="btn icon" id="pjPrev">‹</button>
+      <span class="pj-count" id="pjCount"></span>
+      <button class="btn icon" id="pjNext">›</button>
+      <button class="btn icon" id="pjClose">✕</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
