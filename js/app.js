@@ -6,11 +6,13 @@ const VID_EXT = ['mp4','webm','mov','m4v'];
 
 const state = {
   config: { title:'사진전시관', subtitle:'다섯 개의 방에 거는 사진들', accent:'#c9a227', accent2:'#e8c874', artist:'MetaSongi', year:'2026' },
+  criteria: { min: 4, max: 24 },
   items: [],
   style: 'whitecube',
   seq: 0,
 };
 let walkCleanup = null;
+let carCleanup = null;
 const pj = { list: [], idx: 0, timer: null };
 
 /* ---------- 헬퍼 ---------- */
@@ -38,6 +40,10 @@ async function loadConfig(){
   const savedTitle = localStorage.getItem('ex_title_' + slug(c.title));
   $('#exTitle').textContent = savedTitle || c.title;
   $('#exSubtitle').textContent = c.subtitle;
+  try{
+    const crit = JSON.parse(localStorage.getItem('ex_crit_' + slug(c.title)) || 'null');
+    if (crit && crit.min >= 1 && crit.max >= crit.min) state.criteria = crit;
+  }catch(e){}
 }
 
 /* ---------- 미디어 로드 ---------- */
@@ -88,9 +94,10 @@ function onFilesChosen(e){
 }
 
 /* ---------- 갤러리 ---------- */
-function renderAll(){ renderGallery(); }
+function renderAll(){ renderGallery(); renderCriteriaBar(); }
 function renderGallery(){
   if (walkCleanup){ walkCleanup(); walkCleanup = null; }
+  if (carCleanup){ carCleanup(); carCleanup = null; }
   document.body.classList.toggle('dark', state.style === 'darkroom');
   const g = $('#gallery');
   const items = state.items;
@@ -103,7 +110,11 @@ function renderGallery(){
     openProjector(); renderGallery(); return;
   }
   g.className = 'gallery fade g-' + state.style;
-  ({ whitecube: renderWhiteCube, darkroom: renderDarkroom, walkthrough: renderWalkthrough, magazine: renderMagazine })[state.style](g, items);
+  ({
+    whitecube: renderWhiteCube, darkroom: renderDarkroom, walkthrough: renderWalkthrough,
+    magazine: renderMagazine, bento: renderBento, hscroll: renderHScroll,
+    marquee: renderMarquee, carousel: renderCarousel, polaroid: renderPolaroid,
+  })[state.style](g, items);
 }
 function setActiveNav(style){
   document.querySelector('#styleSwitch .active')?.classList.remove('active');
@@ -175,6 +186,162 @@ function renderMagazine(g, items){
     img.addEventListener('click', () => openLightbox(rest[i].id)));
   g.querySelectorAll('.mag-img img,.mag-cover img').forEach(el => el.style.cursor = 'pointer');
 }
+/* --- 벤토 그리드 --- */
+const BENTO_PAT = [[2,2],[1,1],[1,1],[1,2],[1,1],[2,1],[1,1],[1,1],[2,2],[1,1],[1,2],[2,1]];
+function renderBento(g, items){
+  g.innerHTML = items.map((it, i) => {
+    const [c, r] = BENTO_PAT[i % BENTO_PAT.length];
+    const media = it.type === 'image'
+      ? `<img src="${esc(it.url)}" alt="${esc(it.title)}" loading="lazy">`
+      : `<video src="${esc(it.url)}" muted playsinline preload="metadata"></video>`;
+    return `<div class="bento-item" data-id="${it.id}" style="grid-column:span ${c};grid-row:span ${r}">
+      ${media}
+      ${it.type === 'video' ? '<span class="type-badge">▶</span>' : ''}
+      <div class="bcap">${esc(it.title)}</div></div>`;
+  }).join('');
+  bindWorkCards2(g);
+}
+/* --- 가로 스크롤 --- */
+function renderHScroll(g, items){
+  g.innerHTML = items.map((it, i) => `
+    <div class="hcard" data-id="${it.id}">
+      ${it.type === 'image'
+        ? `<img src="${esc(it.url)}" alt="${esc(it.title)}" loading="lazy">`
+        : `<video src="${esc(it.url)}" muted loop playsinline preload="metadata"></video>`}
+      <div class="hcap"><span>${num2(i+1)}</span>${esc(it.title)}</div>
+    </div>`).join('');
+  bindWorkCards2(g);
+  g.querySelectorAll('video').forEach(v => {
+    const card = v.closest('.hcard');
+    card.addEventListener('mouseenter', () => v.play().catch(()=>{}));
+    card.addEventListener('mouseleave', () => { v.pause(); v.currentTime = 0; });
+  });
+}
+/* --- 마퀴 --- */
+function renderMarquee(g, items){
+  const card = it => `
+    <div class="mq-item" data-id="${it.id}">
+      <img src="${esc(it.url)}" alt="${esc(it.title)}" loading="lazy" draggable="false">
+      <div class="bcap">${esc(it.title)}</div>
+    </div>`;
+  const half = items.map(card).join('');
+  g.innerHTML = `<div class="mq-row">${half}${half}</div><div class="mq-row rev">${half}${half}</div>
+    <div class="walk-hint" style="position:static;transform:none;display:inline-block;margin-top:6px">마우스를 올리면 멈춤 · 클릭으로 크게 보기</div>`;
+  bindWorkCards2(g);
+}
+/* --- 3D 캐러셀 --- */
+function renderCarousel(g, items){
+  const list = items.slice(0, 24);
+  g.innerHTML = `<div class="car-stage" id="carStage"></div>
+    <div class="walk-hint">드래그로 회전 · 클릭으로 크게 보기</div>`;
+  const stage = $('#carStage');
+  const n = list.length;
+  const R = Math.max(420, n * 52);
+  list.forEach(it => {
+    const d = document.createElement('div');
+    d.className = 'car-item'; d.dataset.id = it.id;
+    d.innerHTML = `${it.type === 'image'
+      ? `<img src="${esc(it.url)}" alt="${esc(it.title)}" draggable="false">`
+      : `<video src="${esc(it.url)}" muted playsinline preload="metadata"></video>`}
+      <div class="ccap">${esc(it.title)}</div>`;
+    stage.appendChild(d);
+  });
+  const els = [...stage.children];
+  let ang = 0, target = 0, dragging = false, lx = 0, moved = 0, raf = 0, alive = true;
+  const layout = () => {
+    els.forEach((el, i) => {
+      const a = ang + i * (360 / n);
+      const rad = a * Math.PI / 180;
+      const facing = Math.cos(rad); // 1 = 정면
+      const scale = 1 + Math.max(0, facing) * 0.18;
+      el.style.transform =
+        `translate(-50%,-50%) rotateY(${a}deg) translateZ(${R}px) scale(${scale.toFixed(3)})`;
+      el.style.zIndex = Math.round(facing * 100);
+      el.style.opacity = (0.25 + Math.max(0, facing) * 0.75).toFixed(2);
+      el.style.pointerEvents = facing > 0.3 ? 'auto' : 'none';
+    });
+  };
+  const loop = () => {
+    if (!alive) return;
+    if (!dragging) target += 0.14;
+    ang += (target - ang) * 0.07;
+    layout();
+    raf = requestAnimationFrame(loop);
+  };
+  const dn = e => { dragging = true; lx = e.clientX; moved = 0; stage.style.cursor = 'grabbing'; };
+  const mv = e => {
+    if (!dragging) return;
+    const dx = e.clientX - lx; lx = e.clientX; moved += Math.abs(dx);
+    target += dx * 0.28;
+  };
+  const up = () => { dragging = false; stage.style.cursor = 'grab'; };
+  stage.addEventListener('pointerdown', dn);
+  window.addEventListener('pointermove', mv);
+  window.addEventListener('pointerup', up);
+  stage.style.cursor = 'grab';
+  stage.addEventListener('click', e => {
+    if (moved > 8) return;
+    const item = e.target.closest('.car-item');
+    if (item) openLightbox(item.dataset.id);
+  });
+  layout(); loop();
+  carCleanup = () => {
+    alive = false; cancelAnimationFrame(raf);
+    stage.removeEventListener('pointerdown', dn);
+    window.removeEventListener('pointermove', mv);
+    window.removeEventListener('pointerup', up);
+  };
+}
+/* --- 폴라로이드 --- */
+function renderPolaroid(g, items){
+  g.innerHTML = items.map((it, i) => `
+    <figure class="pol" data-id="${it.id}" style="--r:${((i * 37) % 11) - 5}deg">
+      ${it.type === 'image'
+        ? `<img src="${esc(it.url)}" alt="${esc(it.title)}" loading="lazy">`
+        : `<video src="${esc(it.url)}" muted playsinline preload="metadata"></video>`}
+      <figcaption>${esc(it.title)}</figcaption>
+    </figure>`).join('');
+  bindWorkCards2(g);
+}
+function bindWorkCards2(g){
+  g.querySelectorAll('[data-id]').forEach(el =>
+    el.addEventListener('click', () => openLightbox(el.dataset.id)));
+}
+
+/* ---------- 전시 기준 ---------- */
+function renderCriteriaBar(){
+  const bar = $('#criteriaBar');
+  const n = state.items.length;
+  const { min, max } = state.criteria;
+  if (!n){ bar.hidden = true; return; }
+  bar.hidden = false;
+  let cls = 'ok', html = `🖼️ ${n}장 · 기준 ${min}~${max}장`;
+  if (n < min){ cls = 'warn'; html = `⚠️ 최소 ${min}장이 필요해요 — 현재 ${n}장, ${min - n}장 더 걸어주세요`; }
+  else if (n > max){ cls = 'warn'; html = `⚠️ 최대 ${max}장을 초과했어요 — 현재 ${n}장 <button class="btn sm" id="btnTrim">앞 ${max}장만 남기기</button>`; }
+  bar.className = 'criteria ' + cls;
+  bar.innerHTML = html;
+  $('#btnTrim')?.addEventListener('click', () => {
+    state.items = state.items.slice(0, max);
+    renderAll();
+    toast(`앞 ${max}장만 남겼어요`);
+  });
+}
+function openCriteriaModal(){
+  $('#critMin').value = state.criteria.min;
+  $('#critMax').value = state.criteria.max;
+  $('#criteriaModal').hidden = false;
+}
+function saveCriteria(){
+  let mn = Math.max(1, parseInt($('#critMin').value, 10) || 1);
+  let mx = Math.max(1, parseInt($('#critMax').value, 10) || 1);
+  if (mn > mx) [mn, mx] = [mx, mn];
+  state.criteria = { min: mn, max: mx };
+  localStorage.setItem('ex_crit_' + slug(state.config.title), JSON.stringify(state.criteria));
+  $('#criteriaModal').hidden = true;
+  renderCriteriaBar();
+  toast(`전시 기준을 ${mn}~${mx}장으로 정했어요`);
+}
+
 function bindWorkCards(g){
   g.querySelectorAll('[data-id]').forEach(el => {
     if (el.classList.contains('work') || el.classList.contains('dwork'))
@@ -584,6 +751,11 @@ function init(){
     if (n){ renderAll(); toast(`${n}점을 가져왔어요${bad ? ` (${bad}개 인식 실패)` : ''}`); }
     else toast('가져올 수 있는 링크가 없어요');
   });
+
+  $('#btnCriteria').addEventListener('click', openCriteriaModal);
+  $('#btnCritClose').addEventListener('click', () => $('#criteriaModal').hidden = true);
+  $('#criteriaModal').addEventListener('click', e => { if (e.target.id === 'criteriaModal') e.target.hidden = true; });
+  $('#btnCritSave').addEventListener('click', saveCriteria);
 
   $('#styleSwitch').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
     setActiveNav(b.dataset.style);

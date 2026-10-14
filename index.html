@@ -23,6 +23,7 @@
     <button class="btn ghost" id="btnFiles">💻 파일 올리기</button>
     <button class="btn ghost" id="btnLink">🔗 링크 가져오기</button>
     <button class="btn ghost" id="btnDemo">✨ 데모 전시</button>
+    <button class="btn ghost" id="btnCriteria" title="전시 사진 장수 기준">⚙️ 전시 기준</button>
   </div>
 </header>
 <input type="file" id="folderInput" webkitdirectory multiple hidden>
@@ -34,7 +35,14 @@
   <button data-style="walkthrough">🚶 3D 전시관</button>
   <button data-style="projector">📽️ 프로젝터</button>
   <button data-style="magazine">📰 매거진</button>
+  <button data-style="bento">🍱 벤토</button>
+  <button data-style="hscroll">↔️ 가로스크롤</button>
+  <button data-style="marquee">🎞️ 마퀴</button>
+  <button data-style="carousel">🌀 3D 캐러셀</button>
+  <button data-style="polaroid">📸 폴라로이드</button>
 </nav>
+
+<div class="criteria" id="criteriaBar" hidden></div>
 
 <main id="gallery" class="gallery"></main>
 
@@ -73,6 +81,23 @@
       <span class="pj-count" id="pjCount"></span>
       <button class="btn icon" id="pjNext">›</button>
       <button class="btn icon" id="pjClose">✕</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="criteriaModal" hidden>
+  <div class="modal-card">
+    <h2>⚙️ 전시 기준</h2>
+    <p class="hint">한 전시에 걸 사진의 최소·최대 장수를 정하세요.<br>기준을 벗어나면 갤러리 상단에 알려줍니다.</p>
+    <div class="crit-row">
+      <label>최소 <input type="number" id="critMin" min="1" max="99" value="4"> 장</label>
+      <span>~</span>
+      <label>최대 <input type="number" id="critMax" min="1" max="99" value="24"> 장</label>
+    </div>
+    <div class="modal-actions">
+      <span class="spacer"></span>
+      <button class="btn ghost sm" id="btnCritClose">닫기</button>
+      <button class="btn primary sm" id="btnCritSave">저장</button>
     </div>
   </div>
 </div>
