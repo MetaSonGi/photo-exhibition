@@ -20,7 +20,8 @@
   </div>
   <div class="top-actions">
     <button class="btn primary" id="btnFolder">📁 폴더 열기</button>
-    <button class="btn ghost" id="btnFiles">＋ 파일 추가</button>
+    <button class="btn ghost" id="btnFiles">💻 파일 올리기</button>
+    <button class="btn ghost" id="btnLink">🔗 링크 가져오기</button>
     <button class="btn ghost" id="btnDemo">✨ 데모 전시</button>
   </div>
 </header>
@@ -40,7 +41,7 @@
 <div class="empty" id="emptyState">
   <div class="empty-art">🖼️</div>
   <h2>전시할 사진을 걸어주세요</h2>
-  <p>사진이 담긴 <b>폴더 하나</b>를 열면<br>다섯 개의 전시실이 열립니다.</p>
+  <p>사진이 담긴 <b>폴더</b>를 열거나, <b>파일</b>을 올리거나,<br><b>구글 드라이브 공유 링크</b>로 가져오면 전시회가 열립니다.</p>
   <div class="empty-btns">
     <button class="btn primary" id="btnEmptyFolder">📁 폴더 열기</button>
     <button class="btn ghost" id="btnEmptyDemo">✨ 데모 전시 보기</button>
@@ -72,6 +73,20 @@
       <span class="pj-count" id="pjCount"></span>
       <button class="btn icon" id="pjNext">›</button>
       <button class="btn icon" id="pjClose">✕</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="linkModal" hidden>
+  <div class="modal-card">
+    <h2>🔗 링크로 가져오기</h2>
+    <p class="hint">구글 드라이브 <b>공유 링크</b> 또는 이미지·영상 직접 링크를<br>한 줄에 하나씩 붙여넣으세요.
+    드라이브 파일은 <b>'링크가 있는 모든 사용자'</b>로 공유되어 있어야 합니다.</p>
+    <textarea id="linkInput" rows="6" placeholder="https://drive.google.com/file/d/1a2b3c/view&#10;https://example.com/photo.jpg"></textarea>
+    <div class="modal-actions">
+      <span class="spacer"></span>
+      <button class="btn ghost sm" id="btnLinkClose">닫기</button>
+      <button class="btn primary sm" id="btnLinkAdd">가져오기</button>
     </div>
   </div>
 </div>

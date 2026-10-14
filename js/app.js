@@ -507,6 +507,39 @@ function closeProjector(){
   document.body.style.overflow = '';
 }
 
+/* ---------- 링크로 가져오기 (구글 드라이브 공유 링크·직접 링크) ---------- */
+function driveId(url){
+  const m = url.match(/\/file\/d\/([\w-]+)/) || url.match(/[?&]id=([\w-]+)/);
+  return m ? m[1] : null;
+}
+function linkToItem(url){
+  url = (url || '').trim();
+  if (!url) return null;
+  const id = driveId(url);
+  if (id) return { url: `https://drive.google.com/thumbnail?id=${id}&sz=w1920`, name: 'drive-photo.jpg', type: 'image' };
+  const clean = url.split('?')[0].split('#')[0];
+  const name = (() => { try { return decodeURIComponent(clean.split('/').pop()) || 'link'; } catch(e){ return 'link'; } })();
+  if (/\.(jpe?g|png|webp|gif|bmp)$/i.test(clean)) return { url, name, type: 'image' };
+  if (/\.(mp4|webm|mov|m4v)$/i.test(clean)) return { url, name, type: 'video' };
+  return null;
+}
+function addLinkItems(text){
+  const lines = String(text || '').split('\n').map(s => s.trim()).filter(Boolean);
+  let n = 0, bad = 0;
+  for (const line of lines){
+    const m = linkToItem(line);
+    if (!m){ bad++; continue; }
+    state.items.push({
+      id: 'w' + (++state.seq),
+      name: m.name,
+      title: m.name === 'drive-photo.jpg' ? '드라이브 사진' : prettyTitle(m.name),
+      desc: '', url: m.url, type: m.type, source: 'link',
+    });
+    n++;
+  }
+  return { n, bad };
+}
+
 /* ---------- 드래그앤드롭 ---------- */
 function setupDrop(){
   let depth = 0;
@@ -540,6 +573,17 @@ function init(){
   $('#fileInput').addEventListener('change', onFilesChosen);
   $('#btnDemo').addEventListener('click', loadDemo);
   $('#btnEmptyDemo').addEventListener('click', loadDemo);
+
+  $('#btnLink').addEventListener('click', () => { $('#linkModal').hidden = false; });
+  $('#btnLinkClose').addEventListener('click', () => $('#linkModal').hidden = true);
+  $('#linkModal').addEventListener('click', e => { if (e.target.id === 'linkModal') e.target.hidden = true; });
+  $('#btnLinkAdd').addEventListener('click', () => {
+    const { n, bad } = addLinkItems($('#linkInput').value);
+    $('#linkInput').value = '';
+    $('#linkModal').hidden = true;
+    if (n){ renderAll(); toast(`${n}점을 가져왔어요${bad ? ` (${bad}개 인식 실패)` : ''}`); }
+    else toast('가져올 수 있는 링크가 없어요');
+  });
 
   $('#styleSwitch').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
     setActiveNav(b.dataset.style);

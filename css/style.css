@@ -179,6 +179,22 @@ body.dark .styleswitch button.active{background:var(--accent);border-color:var(-
 .pj-controls .btn{background:#17171b;border-color:#2c2c33;color:#e8e6e0}
 .pj-count{font-size:13px;color:#8a867c;min-width:64px;text-align:center}
 
+/* ---------- modal ---------- */
+.modal{position:fixed;inset:0;z-index:80;background:rgba(8,8,10,.6);display:flex;align-items:center;justify-content:center;padding:20px}
+.modal-card{background:#fffdf8;border:1px solid #e2ddd2;border-radius:12px;padding:26px;width:min(520px,94vw);color:var(--ink)}
+body.dark .modal-card{background:#17171b;border-color:#2a2a30;color:#e8e6e0}
+.modal-card h2{font-size:19px;margin-bottom:12px;font-family:'Noto Serif KR',serif}
+.modal-card .hint{font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:14px}
+.modal-card textarea{
+  width:100%;border:1px solid #d8d2c4;border-radius:8px;padding:12px;
+  font-family:inherit;font-size:13px;resize:vertical;background:#fff;color:var(--ink);outline:none;
+}
+.modal-card textarea:focus{border-color:var(--accent)}
+body.dark .modal-card textarea{background:#0e0e10;border-color:#2c2c33;color:#e8e6e0}
+.modal-actions{display:flex;gap:8px;margin-top:16px}
+.spacer{flex:1}
+.btn.sm{padding:8px 14px;font-size:13px}
+
 /* ---------- toast ---------- */
 .toast{
   position:fixed;bottom:26px;left:50%;transform:translateX(-50%);z-index:90;
