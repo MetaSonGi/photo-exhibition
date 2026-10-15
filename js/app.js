@@ -181,6 +181,8 @@ const WALK_THEMES = {
   zen:        { label:'젠 정원', bg:0x0e0f0c, fog:[0x0e0f0c,13,32], wall:0xe6dcc4, floor:0x9a7c58, ceil:0x201a12, hemi:[0xfff2d8,0x2a241a], lamp:0xffe4b0, lampI:0.5, wallTex:'hanji', floorTex:'wood', ceilTex:'beam', sound:'wind' },
   chinese:    { label:'자금성', bg:0x100806, fog:[0x100806,12,30], wall:0x8e2f26, floor:0xcfc8b8, ceil:0x241408, hemi:[0xffd9a0,0x2a1a10], lamp:0xffc98a, lampI:0.6, wallTex:'plaster', floorTex:'marble', ceilTex:'palace', sound:'wind', arch:{ pillars:0x9e2f24, pillarTop:0xc9a227, trim:0xc9a227 } },
   nordic:     { label:'북유럽', bg:0xd8dee2, fog:[0xd8dee2,16,40], wall:0xf4f2ec, floor:0xc9a878, ceil:0xece8de, hemi:[0xffffff,0x9aa0a8], lamp:0xfff6e8, lampI:0.4, wallTex:'plaster', floorTex:'wood', ceilTex:'plaster', sound:'gallery' },
+  neon:      { label:'네온 느와르', bg:0x08080a, fog:[0x08080a,12,30], wall:0x141416, floor:0x1e1e22, ceil:0x0a0a0c, hemi:[0x8a8fd0,0x0a0a10], lamp:0xff5fa2, lampI:0.5, wallTex:'concrete', floorTex:'concrete', ceilTex:'metal', sound:'wind', neonSign:true, arch:{ neon:0xff2d95, neon2:0x2de2ff } },
+  greige:    { label:'그레이지', bg:0xc9bfae, fog:[0xc9bfae,14,34], wall:0xd8cfc0, floor:0xb08d5f, ceil:0xe8e0d0, hemi:[0xfff2e0,0x6a5f4c], lamp:0xffd9a8, lampI:0.55, wallTex:'plaster', floorTex:'wood', ceilTex:'plaster', sound:'gallery', arch:{ trim:0xb08d3e } },
 };
 let walkCleanup = null;
 let carCleanup = null;
@@ -1215,6 +1217,17 @@ function renderWalkthrough(g, items){
       for (let x = -mx; x <= mx + 0.01; x += gap){ put(x, -mz); put(x, mz); }
       for (let z = -mz + gap; z <= mz - gap + 0.01; z += gap){ put(-mx, z); put(mx, z); }
     }
+    if (A.neon){
+      const cols = [A.neon, A.neon2 || A.neon];
+      const mkNeon = (color, w, x, z, ry) => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.09, 0.09), new THREE.MeshBasicMaterial({ color }));
+        m.position.set(x, HH - 0.7, z); m.rotation.y = ry; scene.add(m);
+      };
+      mkNeon(cols[0], hallW - 0.3, 0, -hd + 0.25, 0);
+      mkNeon(cols[1], hallW - 0.3, 0, hd - 0.25, 0);
+      mkNeon(cols[1], hallD - 0.3, -hw + 0.25, 0, Math.PI / 2);
+      mkNeon(cols[0], hallD - 0.3, hw - 0.25, 0, Math.PI / 2);
+    }
     if (A.trim){
       const trimMat = new THREE.MeshStandardMaterial({ color: A.trim, roughness: .3, metalness: .7 });
       const mkTrim = (w, x, z, ry) => {
@@ -1254,6 +1267,25 @@ function renderWalkthrough(g, items){
     const pstand = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.05, 0.14), frameMat);
     pstand.position.set(4.4, 0.52, spawnZ - 1.2);
     scene.add(plaque); scene.add(pstand);
+    if (theme.neonSign){
+      try{
+        const scv = document.createElement('canvas'); scv.width = 1024; scv.height = 256;
+        const sc = scv.getContext('2d');
+        sc.clearRect(0, 0, 1024, 256);
+        sc.font = '700 104px "Noto Serif KR", serif'; sc.textAlign = 'center'; sc.textBaseline = 'middle';
+        const ncol = '#ff5fa2';
+        sc.shadowColor = ncol; sc.shadowBlur = 46; sc.fillStyle = '#fff';
+        const stitle = (state.config.title || '사진전시관').slice(0, 12);
+        sc.fillText(stitle, 512, 130); sc.fillText(stitle, 512, 130);
+        sc.shadowBlur = 10; sc.fillStyle = '#ffd7ea';
+        sc.fillText(stitle, 512, 130);
+        const stex = new THREE.CanvasTexture(scv); stex.colorSpace = THREE.SRGBColorSpace;
+        const sign = new THREE.Mesh(new THREE.PlaneGeometry(7.2, 1.8),
+          new THREE.MeshBasicMaterial({ map: stex, transparent: true }));
+        sign.position.set(4.4, 4.1, spawnZ - 1.35); sign.rotation.y = -0.45;
+        scene.add(sign);
+      }catch(e){}
+    }
   }catch(e){}
 
   /* ---------- 조작: 드래그 시점 + WASD 이동 + 충돌 ---------- */
