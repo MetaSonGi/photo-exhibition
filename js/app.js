@@ -76,6 +76,10 @@ async function loadConfig(){
     const crit = JSON.parse(localStorage.getItem('ex_crit_' + slug(c.title)) || 'null');
     if (crit && crit.min >= 1 && crit.max >= crit.min) state.criteria = crit;
   }catch(e){}
+  try{
+    const wt = localStorage.getItem('ex_wtheme_' + slug(c.title));
+    if (wt && WALK_THEMES[wt]) state.walkTheme = wt;
+  }catch(e){}
 }
 
 /* ---------- 미디어 로드 ---------- */
@@ -659,8 +663,9 @@ function renderWalkthrough(g, items){
   });
   g.querySelectorAll('[data-wtheme]').forEach(b => b.addEventListener('click', () => {
     state.walkTheme = b.dataset.wtheme;
+    localStorage.setItem('ex_wtheme_' + slug(state.config.title), state.walkTheme);
     renderGallery();
-    toast(`${WALK_THEMES[state.walkTheme].label} 공간으로 바꿨어요`);
+    toast(`${WALK_THEMES[state.walkTheme].label} 공간으로 바꿨어요 — 이제 기본 공간으로 저장됩니다`);
   }));
 
   const fwd = new THREE.Vector3(), rgt = new THREE.Vector3();
