@@ -934,6 +934,7 @@ function renderWalkthrough(g, items){
       <button class="btn sm" id="btnSpace">⚙️ 공간 설정</button>
       <button class="btn sm" id="btnEdit">📝 작품 편집</button>
       <button class="btn sm" id="btnWalkHelp">❔ 조작법</button>
+      <button class="btn sm" id="btnFull">⛶ 전체화면</button>
     </div>
     <div class="walk-hint">드래그: 시점 회전 · W A S D: 이동 · 작품 클릭: 크게 보기</div>
     <div class="walk-loading" id="walkLoading">
@@ -1363,6 +1364,19 @@ function renderWalkthrough(g, items){
     toast('드래그: 둘러보기 · W A S D / 방향키: 이동 · 조이스틱(모바일): 이동 · 작품 클릭: 크게 보기'));
   $('#btnSpace').addEventListener('click', openSpaceModal);
   $('#btnEdit').addEventListener('click', openEditModal);
+  const syncFullBtn = () => {
+    const b = $('#btnFull');
+    if (b) b.textContent = document.fullscreenElement ? '🗗 전체화면 해제' : '⛶ 전체화면';
+  };
+  $('#btnFull').addEventListener('click', e => {
+    e.stopPropagation();
+    try{
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      else { const p = document.documentElement.requestFullscreen(); if (p && p.catch) p.catch(() => toast('전체화면을 지원하지 않는 환경이에요')); }
+    }catch(err){ toast('전체화면을 지원하지 않는 환경이에요'); }
+  });
+  document.addEventListener('fullscreenchange', syncFullBtn);
+  syncFullBtn();
 
   const fwd = new THREE.Vector3(), rgt = new THREE.Vector3(), cdir = new THREE.Vector3();
   let raf = 0, alive = true, last = performance.now(), frame = 0;
@@ -1693,8 +1707,20 @@ function setupDrop(){
 }
 
 /* ---------- 초기화 ---------- */
+let fsAutoDone = false;
+function armAutoFullscreen(){
+  document.addEventListener('pointerdown', () => {
+    if (fsAutoDone || !state.items.length || document.fullscreenElement) return;
+    fsAutoDone = true;
+    try{
+      const p = document.documentElement.requestFullscreen();
+      if (p && p.catch) p.catch(() => {});
+    }catch(e){}
+  });
+}
 function init(){
   bindTopMenu();
+  armAutoFullscreen();
   loadConfig().then(() => {
     loadItems();
     // 전시 제목 인라인 편집
