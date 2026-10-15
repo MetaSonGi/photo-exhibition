@@ -462,6 +462,20 @@ function addItems(files){
   }
   return n;
 }
+/* 가져오기 방식 선택: 기존에 추가 vs 다 지우고 새로 */
+let pendingImportMode = null, importModeResolve = null;
+function askImportMode(){
+  return new Promise(resolve => {
+    if (!state.items.length){ resolve('append'); return; }
+    $('#importModeCount').textContent = state.items.length;
+    $('#importModeModal').hidden = false;
+    importModeResolve = resolve;
+  });
+}
+function applyImportMode(mode){
+  if (mode === 'replace') state.items = [];
+}
+
 /* 데모 → 내 사진으로 교체 */
 function swapOutDemo(){
   const n = state.items.filter(i => i.source === 'demo').length;
@@ -469,6 +483,9 @@ function swapOutDemo(){
   return n;
 }
 async function loadDemo(){
+  const mode = await askImportMode();
+  if (!mode) return;
+  applyImportMode(mode);
   try{
     const r = await fetch('assets/demo/manifest.json');
     if (!r.ok) throw 0;
@@ -488,9 +505,13 @@ async function loadDemo(){
 }
 function onFilesChosen(e){
   const files = [...(e.target.files || [])];
+  e.target.value = '';
+  if (!files.length) return;
+  const mode = pendingImportMode || 'append';
+  pendingImportMode = null;
+  applyImportMode(mode);
   const swapped = swapOutDemo();
   const n = addItems(files);
-  e.target.value = '';
   if (n){ renderAll(); toast(`${n}점을 전시실에 걸었어요${swapped ? ` · 데모 ${swapped}점을 교체했어요` : ''}`); }
   else toast('사진·영상 파일이 없어요');
 }
@@ -1560,6 +1581,9 @@ async function importDriveFolder(){
   const fid = driveFolderId(folderUrl);
   if (!fid){ toast('드라이브 폴더 링크를 입력해 주세요'); return; }
   if (!key){ toast('Drive API 키를 입력해 주세요 (위 안내 참고)'); return; }
+  const mode = await askImportMode();
+  if (!mode) return;
+  $('#linkModal').hidden = true;
   toast('폴더를 읽는 중…');
   try{
     const media = [];
@@ -1575,6 +1599,7 @@ async function importDriveFolder(){
     await walk(fid, 0, '');
     if (!media.length){ toast('폴더에 사진·영상이 없어요. 폴더 공유 설정을 확인해 주세요'); return; }
     localStorage.setItem('ex_drivekey_' + slug(state.config.title), key);
+    applyImportMode(mode);
     const swapped = swapOutDemo();
     for (const f of media){
       const isVideo = (f.mimeType || '').startsWith('video');
@@ -1680,9 +1705,20 @@ function init(){
     renderAll();
   });
 
-  $('#btnFolder').addEventListener('click', () => $('#folderInput').click());
-  $('#btnEmptyFolder').addEventListener('click', () => $('#folderInput').click());
-  $('#btnFiles').addEventListener('click', () => $('#fileInput').click());
+  const pickWithMode = input => (async () => {
+    const mode = await askImportMode();
+    if (!mode) return;
+    pendingImportMode = mode;
+    $(input).click();
+  });
+  $('#btnFolder').addEventListener('click', pickWithMode('#folderInput'));
+  $('#btnEmptyFolder').addEventListener('click', pickWithMode('#folderInput'));
+  $('#btnFiles').addEventListener('click', pickWithMode('#fileInput'));
+  const closeImportMode = m => { $('#importModeModal').hidden = true; if (importModeResolve){ importModeResolve(m); importModeResolve = null; } };
+  $('#btnImportAppend').addEventListener('click', () => closeImportMode('append'));
+  $('#btnImportReplace').addEventListener('click', () => closeImportMode('replace'));
+  $('#btnImportCancel').addEventListener('click', () => closeImportMode(null));
+  $('#importModeModal').addEventListener('click', e => { if (e.target.id === 'importModeModal') closeImportMode(null); });
   $('#folderInput').addEventListener('change', onFilesChosen);
   $('#fileInput').addEventListener('change', onFilesChosen);
   $('#btnDemo').addEventListener('click', loadDemo);
@@ -1694,12 +1730,15 @@ function init(){
   });
   $('#btnLinkClose').addEventListener('click', () => $('#linkModal').hidden = true);
   $('#linkModal').addEventListener('click', e => { if (e.target.id === 'linkModal') e.target.hidden = true; });
-  $('#btnLinkAdd').addEventListener('click', () => {
+  $('#btnLinkAdd').addEventListener('click', async () => {
     const raw = $('#linkInput').value;
     if (/\/drive\/folders\//.test(raw)){
       toast('폴더 링크는 아래 "📁 드라이브 폴더 통째로"에서 가져와 주세요');
       return;
     }
+    const mode = await askImportMode();
+    if (!mode) return;
+    applyImportMode(mode);
     const swapped = swapOutDemo();
     const { n, bad } = addLinkItems(raw);
     $('#linkInput').value = '';

@@ -227,6 +227,18 @@
   </div>
 </div>
 
+<div class="modal" id="importModeModal" hidden>
+  <div class="modal-card">
+    <h2>📥 사진 가져오기</h2>
+    <p class="hint">현재 <b id="importModeCount">0</b>점이 전시되어 있어요.<br>새 사진을 어떻게 가져올까요?</p>
+    <div class="modal-actions" style="flex-direction:column;align-items:stretch;gap:8px">
+      <button class="btn primary" id="btnImportAppend">➕ 기존 전시에 추가하기</button>
+      <button class="btn" id="btnImportReplace">🔄 다 지우고 새로 시작하기</button>
+      <button class="btn ghost" id="btnImportCancel">취소</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast" hidden></div>
 
 <script src="js/app.js"></script>
