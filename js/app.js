@@ -150,17 +150,23 @@ function tiledTex(cv, rx, ry){
   return t;
 }
 const WALK_THEMES = {
-  whitecube:  { label:'화이트큐브', bg:0x0e0e10, fog:[0x0e0e10,14,34], wall:0xece5d8, floor:0x8a6f52, ceil:0x17171a, hemi:[0xfff6e8,0x2a2a30], lamp:0xffe2b0, lampI:0.55, wallTex:'plaster', floorTex:'concrete', ceilTex:'plaster' },
-  darkmood:   { label:'다크 무드', bg:0x060607, fog:[0x060607,11,28], wall:0x232328, floor:0x141416, ceil:0x0b0b0d, hemi:[0xa9bdf5,0x14151c], lamp:0xa9bdf5, lampI:0.7, wallTex:'concrete', floorTex:'wood', ceilTex:'concrete' },
-  industrial: { label:'인더스트리얼', bg:0x131210, fog:[0x131210,13,32], wall:0x53524e, floor:0x3c3833, ceil:0x232220, hemi:[0xffd9a0,0x2e271c], lamp:0xffc37a, lampI:0.6, wallTex:'concrete', floorTex:'concrete', ceilTex:'metal' },
-  minimal:    { label:'미니멀 화이트', bg:0xcfd4d8, fog:[0xcfd4d8,16,40], wall:0xf7f4ee, floor:0xc9b795, ceil:0xe9e5db, hemi:[0xffffff,0x9a8f7c], lamp:0xfff3de, lampI:0.5, wallTex:'plaster', floorTex:'wood', ceilTex:'plaster' },
-  sunset:     { label:'선셋', bg:0x160d08, fog:[0x160d08,12,30], wall:0x6b4a35, floor:0x2e1f16, ceil:0x100b07, hemi:[0xffb37a,0x2a1a10], lamp:0xff9a5c, lampI:0.62, wallTex:'plaster', floorTex:'wood', ceilTex:'plaster' },
-  louvre:     { label:'루브르 클래식', bg:0x141009, fog:[0x141009,13,32], wall:0xd9c9a8, floor:0x6b4f35, ceil:0x241c12, hemi:[0xffe8c0,0x3a2a18], lamp:0xffd9a0, lampI:0.55, wallTex:'stone', floorTex:'wood', ceilTex:'coffer' },
-  guggenheim: { label:'구겐하임', bg:0x101216, fog:[0x101216,15,38], wall:0xf0efe9, floor:0xb9bcb4, ceil:0xdfe0da, hemi:[0xf2f5ff,0x8a8f96], lamp:0xeef2ff, lampI:0.5, wallTex:'plaster', floorTex:'marble', ceilTex:'plaster' },
-  tate:       { label:'테이트 모던', bg:0x0d0c0b, fog:[0x0d0c0b,12,30], wall:0x6e4a3a, floor:0x35322e, ceil:0x1a1917, hemi:[0xd8e2f0,0x2a2622], lamp:0xdce8ff, lampI:0.55, wallTex:'brick', floorTex:'concrete', ceilTex:'concrete' },
-  pompidou:   { label:'퐁피두', bg:0x0a0c10, fog:[0x0a0c10,12,30], wall:0x2e3440, floor:0x1c1e24, ceil:0x14161c, hemi:[0xbcd0ff,0x1a2030], lamp:0xcfe0ff, lampI:0.6, wallTex:'metal', floorTex:'concrete', ceilTex:'metal' },
-  orsay:      { label:'오르세', bg:0x120e08, fog:[0x120e08,13,32], wall:0xe5d9c0, floor:0x7a5c3a, ceil:0x2a2118, hemi:[0xffe2b0,0x3a2c1c], lamp:0xffc98a, lampI:0.55, wallTex:'plaster', floorTex:'wood', ceilTex:'coffer' },
-  hanok:      { label:'한옥 갤러리', bg:0x0f0c08, fog:[0x0f0c08,12,30], wall:0xe8dcc0, floor:0x4a382c, ceil:0x241a12, hemi:[0xffdfae,0x33241a], lamp:0xffbe78, lampI:0.58, wallTex:'hanji', floorTex:'wood', ceilTex:'beam' },
+  whitecube:  { label:'화이트큐브', bg:0x0e0e10, fog:[0x0e0e10,14,34], wall:0xece5d8, floor:0x8a6f52, ceil:0x17171a, hemi:[0xfff6e8,0x2a2a30], lamp:0xffe2b0, lampI:0.55, wallTex:'plaster', floorTex:'concrete', ceilTex:'plaster', sound:'gallery' },
+  darkmood:   { label:'다크 무드', bg:0x060607, fog:[0x060607,11,28], wall:0x232328, floor:0x141416, ceil:0x0b0b0d, hemi:[0xa9bdf5,0x14151c], lamp:0xa9bdf5, lampI:0.7, wallTex:'concrete', floorTex:'wood', ceilTex:'concrete', sound:'rain' },
+  industrial: { label:'인더스트리얼', bg:0x131210, fog:[0x131210,13,32], wall:0x53524e, floor:0x3c3833, ceil:0x232220, hemi:[0xffd9a0,0x2e271c], lamp:0xffc37a, lampI:0.6, wallTex:'concrete', floorTex:'concrete', ceilTex:'metal', sound:'wind' },
+  minimal:    { label:'미니멀 화이트', bg:0xcfd4d8, fog:[0xcfd4d8,16,40], wall:0xf7f4ee, floor:0xc9b795, ceil:0xe9e5db, hemi:[0xffffff,0x9a8f7c], lamp:0xfff3de, lampI:0.5, wallTex:'plaster', floorTex:'wood', ceilTex:'plaster', sound:'gallery' },
+  sunset:     { label:'선셋', bg:0x160d08, fog:[0x160d08,12,30], wall:0x6b4a35, floor:0x2e1f16, ceil:0x100b07, hemi:[0xffb37a,0x2a1a10], lamp:0xff9a5c, lampI:0.62, wallTex:'plaster', floorTex:'wood', ceilTex:'plaster', sound:'wave' },
+  louvre:     { label:'루브르 클래식', bg:0x141009, fog:[0x141009,13,32], wall:0xd9c9a8, floor:0x6b4f35, ceil:0x241c12, hemi:[0xffe8c0,0x3a2a18], lamp:0xffd9a0, lampI:0.55, wallTex:'stone', floorTex:'wood', ceilTex:'coffer', sound:'gallery' },
+  guggenheim: { label:'구겐하임', bg:0x101216, fog:[0x101216,15,38], wall:0xf0efe9, floor:0xb9bcb4, ceil:0xdfe0da, hemi:[0xf2f5ff,0x8a8f96], lamp:0xeef2ff, lampI:0.5, wallTex:'plaster', floorTex:'marble', ceilTex:'plaster', sound:'wind' },
+  tate:       { label:'테이트 모던', bg:0x0d0c0b, fog:[0x0d0c0b,12,30], wall:0x6e4a3a, floor:0x35322e, ceil:0x1a1917, hemi:[0xd8e2f0,0x2a2622], lamp:0xdce8ff, lampI:0.55, wallTex:'brick', floorTex:'concrete', ceilTex:'concrete', sound:'rain' },
+  pompidou:   { label:'퐁피두', bg:0x0a0c10, fog:[0x0a0c10,12,30], wall:0x2e3440, floor:0x1c1e24, ceil:0x14161c, hemi:[0xbcd0ff,0x1a2030], lamp:0xcfe0ff, lampI:0.6, wallTex:'metal', floorTex:'concrete', ceilTex:'metal', sound:'gallery' },
+  orsay:      { label:'오르세', bg:0x120e08, fog:[0x120e08,13,32], wall:0xe5d9c0, floor:0x7a5c3a, ceil:0x2a2118, hemi:[0xffe2b0,0x3a2c1c], lamp:0xffc98a, lampI:0.55, wallTex:'plaster', floorTex:'wood', ceilTex:'coffer', sound:'wave' },
+  hanok:      { label:'한옥 갤러리', bg:0x0f0c08, fog:[0x0f0c08,12,30], wall:0xe8dcc0, floor:0x4a382c, ceil:0x241a12, hemi:[0xffdfae,0x33241a], lamp:0xffbe78, lampI:0.58, wallTex:'hanji', floorTex:'wood', ceilTex:'beam', sound:'rain' },
+  gothic:     { label:'고딕 성당', bg:0x0a0a0c, fog:[0x0a0a0c,12,30], wall:0x4a4540, floor:0x2e2c28, ceil:0x141316, hemi:[0xcfd6e6,0x1a1a20], lamp:0xd8e2f5, lampI:0.45, wallTex:'stone', floorTex:'concrete', ceilTex:'stone', sound:'rain' },
+  baroque:    { label:'바로크 궁전', bg:0x120b08, fog:[0x120b08,12,30], wall:0x6e2a24, floor:0x3a2c1e, ceil:0x1e120c, hemi:[0xffd9a8,0x2a1a10], lamp:0xffc98a, lampI:0.6, wallTex:'plaster', floorTex:'wood', ceilTex:'coffer', sound:'gallery' },
+  mediterranean:{ label:'지중해', bg:0xbfd4de, fog:[0xbfd4de,16,40], wall:0xf2ede2, floor:0xd9c9a8, ceil:0xe8e2d4, hemi:[0xffffff,0x8a9aa8], lamp:0xfff4e0, lampI:0.45, wallTex:'plaster', floorTex:'marble', ceilTex:'plaster', sound:'wave' },
+  zen:        { label:'젠 정원', bg:0x0e0f0c, fog:[0x0e0f0c,13,32], wall:0xe6dcc4, floor:0x9a7c58, ceil:0x201a12, hemi:[0xfff2d8,0x2a241a], lamp:0xffe4b0, lampI:0.5, wallTex:'hanji', floorTex:'wood', ceilTex:'beam', sound:'wind' },
+  chinese:    { label:'자금성', bg:0x100806, fog:[0x100806,12,30], wall:0x8e2f26, floor:0x4a3226, ceil:0x1c100a, hemi:[0xffd9a0,0x2a1a10], lamp:0xffbe78, lampI:0.55, wallTex:'plaster', floorTex:'wood', ceilTex:'beam', sound:'wind' },
+  nordic:     { label:'북유럽', bg:0xd8dee2, fog:[0xd8dee2,16,40], wall:0xf4f2ec, floor:0xc9a878, ceil:0xece8de, hemi:[0xffffff,0x9aa0a8], lamp:0xfff6e8, lampI:0.4, wallTex:'plaster', floorTex:'wood', ceilTex:'plaster', sound:'gallery' },
 };
 let walkCleanup = null;
 let carCleanup = null;
@@ -255,15 +261,18 @@ function saveSpace(){
   }catch(e){}
 }
 
+const LAYOUTS = { serpentine:'서펜타인 홀', atrium:'아트리움', rotunda:'로툰다', maze:'미로' };
+
 /* ---------- 3D 공간 설정 ---------- */
 function openSpaceModal(){
   const lay = $('#spaceLayouts');
+  lay.innerHTML = Object.entries(LAYOUTS).map(([k, label]) =>
+    `<button class="btn sm${k === (state.space.layout || 'serpentine') ? ' primary' : ''}" data-layout="${k}">${label}</button>`).join('');
   lay.querySelectorAll('button').forEach(b => {
-    b.classList.toggle('primary', b.dataset.layout === (state.space.layout || 'serpentine'));
     b.onclick = () => {
       state.space.layout = b.dataset.layout;
       saveSpace(); openSpaceModal(); renderGallery();
-      toast(b.dataset.layout === 'atrium' ? '아트리움 배치로 바꿨어요' : '서펜타인 홀 배치로 바꿨어요');
+      toast(`'${LAYOUTS[b.dataset.layout]}' 배치로 바꿨어요`);
     };
   });
   const snd = $('#spaceSounds');
@@ -282,8 +291,10 @@ function openSpaceModal(){
   st.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
     state.walkTheme = b.dataset.stheme;
     localStorage.setItem('ex_wtheme_' + slug(state.config.title), state.walkTheme);
+    const th = WALK_THEMES[state.walkTheme];
+    if (th.sound && amb.mode !== th.sound){ amb.mode = th.sound; ambienceBuild(); saveSpace(); }
     openSpaceModal(); renderGallery();
-    toast(`${WALK_THEMES[state.walkTheme].label} 공간으로 바꿨어요`);
+    toast(`${th.label} 공간으로 바꿨어요`);
   }));
   $('#setLight').value = Math.round(state.space.light * 100);
   $('#setLightV').textContent = Math.round(state.space.light * 100) + '%';
@@ -874,10 +885,10 @@ function renderWalkthrough(g, items){
   const theme = WALK_THEMES[state.walkTheme] || WALK_THEMES.whitecube;
   g.innerHTML = `
     <div class="walk-ui">
-      <button class="btn" id="btnTour">🎧 도슨트 투어</button>
-      <button class="btn" id="btnSpace">⚙️ 공간 설정</button>
-      <button class="btn" id="btnEdit">📝 작품 편집</button>
-      <button class="btn" id="btnWalkHelp">❔ 조작법</button>
+      <button class="btn sm" id="btnTour">🎧 도슨트 투어</button>
+      <button class="btn sm" id="btnSpace">⚙️ 공간 설정</button>
+      <button class="btn sm" id="btnEdit">📝 작품 편집</button>
+      <button class="btn sm" id="btnWalkHelp">❔ 조작법</button>
     </div>
     <div class="walk-hint">드래그: 시점 회전 · W A S D: 이동 · 작품 클릭: 크게 보기</div>
     <div class="walk-loading" id="walkLoading">
@@ -885,10 +896,10 @@ function renderWalkthrough(g, items){
       <div class="walk-loading-bar"><div id="walkBar"></div></div>
     </div>
     <div class="walk-lookcard" id="walkLook" hidden></div>`;
-  const W = g.clientWidth, H = Math.max(480, Math.min(760, Math.round(W * 0.5)));
+  const W = g.clientWidth, H = Math.max(480, Math.min(1020, Math.round(window.innerHeight - 250)));
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(theme.bg);
-  scene.fog = new THREE.Fog(theme.bg, 25, 150);
+  scene.fog = new THREE.Fog(theme.bg, 25, 210);
   const camera = new THREE.PerspectiveCamera(68, W/H, 0.1, 400);
   const EYE = 1.65;
   const renderer = new THREE.WebGLRenderer({ antialias:true });
@@ -901,7 +912,7 @@ function renderWalkthrough(g, items){
 
   /* ---------- 전시장 레이아웃 ---------- */
   const N = items.length;
-  const SEG_T = 0.4, SEG_H = 4.2;
+  const SEG_T = 0.4, SEG_H = 4.6;
   const SPACING = 3.0, ART_Y = 1.75, FW = 1.9, FH = 1.2;
   const layout = state.space.layout || 'serpentine';
   const wallSegs = [];   // {cx, cz, len}
@@ -910,11 +921,11 @@ function renderWalkthrough(g, items){
   let hallW, hallD, firstRowZ;
   if (layout === 'atrium'){
     // 아트리움: 격자형 독립 파티션
-    const WLEN = 12, GAP = 11;
+    const WLEN = 14, GAP = 13;
     const perSeg = Math.max(2, Math.floor(WLEN / SPACING)) * 2;
     const cells = Math.max(1, Math.ceil(N / perSeg));
     const GC = Math.ceil(Math.sqrt(cells));
-    hallW = GC * GAP + 18; hallD = GC * GAP + 18;
+    hallW = GC * GAP + 22; hallD = GC * GAP + 22;
     let need = N;
     for (let gz = 0; gz < GC && need > 0; gz++) for (let gx = 0; gx < GC && need > 0; gx++){
       const cx = (gx - (GC - 1) / 2) * GAP, cz = (gz - (GC - 1) / 2) * GAP;
@@ -925,29 +936,71 @@ function renderWalkthrough(g, items){
     for (let gz = 0; gz < GC; gz++)
       stripDefs.push({ x: 0, z: (gz - (GC - 1) / 2) * GAP, len: GC * GAP });
     firstRowZ = -(GC - 1) / 2 * GAP;
-  } else {
-    // 서펜타인: 지그재그 파티션 행
-    const SEGS_PER_ROW = 4, SEG_LEN = 15, ROW_GAP = 9;
+  } else if (layout === 'rotunda'){
+    // 로툰다: 동심원 링 파티션
+    const SEG_LEN = 13, RING_GAP = 13;
+    const perSeg = Math.max(2, Math.floor(SEG_LEN / SPACING)) * 2;
+    const NSEG = Math.max(6, Math.min(12, Math.ceil(N / perSeg) + 2));
+    const R0 = Math.max(14, NSEG * (SEG_LEN + 2) / (2 * Math.PI));
+    let need = N, ring = 0;
+    while (need > 0 && ring < 6){
+      const R = R0 - ring * RING_GAP;
+      for (let s = 0; s < NSEG && need > 0; s++){
+        const a = (s / NSEG) * Math.PI * 2 + ring * 0.26;
+        const ry = -a - Math.PI / 2;
+        const cx = Math.cos(a) * R, cz = Math.sin(a) * R;
+        wallSegs.push({ cx, cz, len: SEG_LEN, ry });
+        spotDefs.push({ x: cx, z: cz });
+        stripDefs.push({ x: cx, z: cz, len: SEG_LEN, ry });
+        need -= perSeg;
+      }
+      ring++;
+    }
+    hallW = hallD = (R0 + 18) * 2;
+    firstRowZ = 0;
+  } else if (layout === 'maze'){
+    // 미로: 엇갈린 지그재그 파티션
+    const SEGS_PER_ROW = 5, SEG_LEN = 13, ROW_GAP = 8, SEG_GAP = 5;
     const perSeg = Math.max(2, Math.floor(SEG_LEN / SPACING)) * 2;
     const rows = Math.max(1, Math.ceil(N / (perSeg * SEGS_PER_ROW)));
-    const rowW = SEGS_PER_ROW * SEG_LEN + (SEGS_PER_ROW - 1) * 6;
-    hallW = rowW + 24; hallD = (rows - 1) * ROW_GAP + 30;
+    const trackW = SEGS_PER_ROW * (SEG_LEN + SEG_GAP);
+    hallW = trackW + 30; hallD = (rows - 1) * ROW_GAP + 36;
+    for (let r = 0; r < rows; r++){
+      const z = -(rows - 1) * ROW_GAP / 2 + r * ROW_GAP;
+      const off = (r % 2) * (SEG_LEN + SEG_GAP) / 2;
+      for (let s = 0; s < SEGS_PER_ROW; s++){
+        const lx = (((s * (SEG_LEN + SEG_GAP) + off) % trackW) + trackW) % trackW;
+        wallSegs.push({ cx: -trackW / 2 + SEG_LEN / 2 + lx, cz: z, len: SEG_LEN });
+      }
+      stripDefs.push({ x: 0, z, len: trackW });
+      spotDefs.push({ x: -trackW / 4, z }, { x: trackW / 4, z });
+    }
+    firstRowZ = -(rows - 1) * ROW_GAP / 2;
+  } else {
+    // 서펜타인: 지그재그 파티션 행
+    const SEGS_PER_ROW = 5, SEG_LEN = 16, ROW_GAP = 11, SEG_GAP = 7;
+    const perSeg = Math.max(2, Math.floor(SEG_LEN / SPACING)) * 2;
+    const rows = Math.max(1, Math.ceil(N / (perSeg * SEGS_PER_ROW)));
+    const rowW = SEGS_PER_ROW * SEG_LEN + (SEGS_PER_ROW - 1) * SEG_GAP;
+    hallW = rowW + 30; hallD = (rows - 1) * ROW_GAP + 36;
     for (let r = 0; r < rows; r++){
       const z = -(rows - 1) * ROW_GAP / 2 + r * ROW_GAP;
       for (let s = 0; s < SEGS_PER_ROW; s++)
-        wallSegs.push({ cx: -rowW / 2 + SEG_LEN / 2 + s * (SEG_LEN + 6), cz: z, len: SEG_LEN });
+        wallSegs.push({ cx: -rowW / 2 + SEG_LEN / 2 + s * (SEG_LEN + SEG_GAP), cz: z, len: SEG_LEN });
       stripDefs.push({ x: 0, z, len: rowW });
       spotDefs.push({ x: -rowW / 4, z }, { x: rowW / 4, z });
     }
     firstRowZ = -(rows - 1) * ROW_GAP / 2;
   }
-  const hw = hallW / 2, hd = hallD / 2, HH = 5.6;
+  const hw = hallW / 2, hd = hallD / 2, HH = 6.4;
   let yaw0 = 0, pitch0 = 0;
   const nearSpawn = layout === 'atrium' || wallSegs.length <= 8;
   const spawnZ = nearSpawn ? Math.min(hd - 4, firstRowZ + 5.5) : hd - 4;
   if (walkView.valid){
     camera.position.set(walkView.x, EYE, walkView.z);
     yaw0 = walkView.yaw; pitch0 = walkView.pitch;
+  } else if (layout === 'rotunda'){
+    camera.position.set(0, EYE, 0);
   } else {
     camera.position.set(0, EYE, spawnZ);
   }
@@ -961,10 +1014,12 @@ function renderWalkthrough(g, items){
   const glowGeoOf = len => geoCache['g' + len] || (geoCache['g' + len] = new THREE.PlaneGeometry(len, 4.2));
   const wallGeoOf = len => geoCache['w' + len] || (geoCache['w' + len] = new THREE.BoxGeometry(len, SEG_H, SEG_T));
   for (const sd of stripDefs){
-    const strip = new THREE.Mesh(boxGeo(sd.len), stripMat);
-    strip.position.set(sd.x, HH - 0.08, sd.z); scene.add(strip);
+    const sgrp = new THREE.Group();
+    sgrp.position.set(sd.x, HH - 0.08, sd.z); sgrp.rotation.y = sd.ry || 0;
+    const strip = new THREE.Mesh(boxGeo(sd.len), stripMat); sgrp.add(strip);
     const glow = new THREE.Mesh(glowGeoOf(sd.len), glowMat);
-    glow.rotation.x = Math.PI / 2; glow.position.set(sd.x, HH - 0.5, sd.z); scene.add(glow);
+    glow.rotation.x = Math.PI / 2; glow.position.set(0, -0.42, 0); sgrp.add(glow);
+    scene.add(sgrp);
   }
   for (const sd of spotDefs){
     const sp = new THREE.SpotLight(theme.lamp, theme.lampI * 1.6 * state.space.light, 34, 0.62, 0.45, 1.1);
@@ -1079,13 +1134,17 @@ function renderWalkthrough(g, items){
   };
   outer:
   for (const seg of wallSegs){
+    const ry = seg.ry || 0;
     const wall = new THREE.Mesh(wallGeoOf(seg.len), wallMat);
-    wall.position.set(seg.cx, SEG_H / 2, seg.cz); scene.add(wall);
-    colliders.push({ minX: seg.cx - seg.len/2, maxX: seg.cx + seg.len/2, minZ: seg.cz - SEG_T/2, maxZ: seg.cz + SEG_T/2 });
+    wall.position.set(seg.cx, SEG_H / 2, seg.cz); wall.rotation.y = ry; scene.add(wall);
+    colliders.push({ cx: seg.cx, cz: seg.cz, len: seg.len, ry });
     const perSide = Math.max(2, Math.floor(seg.len / SPACING));
+    const cosR = Math.cos(ry), sinR = Math.sin(ry);
     for (const side of [1, -1]) for (let k = 0; k < perSide; k++){
       if (idx >= N) break outer;
-      hangOne(seg.cx - (perSide - 1) * SPACING / 2 + k * SPACING, seg.cz + side * (SEG_T / 2 + 0.06), side > 0 ? 0 : Math.PI);
+      const lx = -(perSide - 1) * SPACING / 2 + k * SPACING;
+      const lz = side * (SEG_T / 2 + 0.06);
+      hangOne(seg.cx + lx * cosR + lz * sinR, seg.cz - lx * sinR + lz * cosR, ry + (side > 0 ? 0 : Math.PI));
     }
   }
   if (texCount === 0 && loadingEl) loadingEl.remove();
@@ -1178,12 +1237,19 @@ function renderWalkthrough(g, items){
   const collide = p => {
     const R = 0.55;
     for (const b of colliders){
-      const nx = Math.max(b.minX, Math.min(p.x, b.maxX));
-      const nz = Math.max(b.minZ, Math.min(p.z, b.maxZ));
-      const dx = p.x - nx, dz = p.z - nz, d2 = dx*dx + dz*dz;
+      const ry = b.ry || 0;
+      const c = Math.cos(ry), s = Math.sin(ry);
+      const dx = p.x - b.cx, dz = p.z - b.cz;
+      const lx = dx * c - dz * s, lz = dx * s + dz * c;
+      const hx = b.len / 2, hz = SEG_T / 2;
+      const nx = Math.max(-hx, Math.min(lx, hx));
+      const nz = Math.max(-hz, Math.min(lz, hz));
+      const ex = lx - nx, ez = lz - nz, d2 = ex*ex + ez*ez;
       if (d2 < R * R && d2 > 1e-6){
         const d = Math.sqrt(d2);
-        p.x = nx + dx / d * R; p.z = nz + dz / d * R;
+        const wx = nx + ex / d * R, wz = nz + ez / d * R;
+        p.x = b.cx + wx * c + wz * s;
+        p.z = b.cz - wx * s + wz * c;
       }
     }
     p.x = Math.max(-hw + 1, Math.min(hw - 1, p.x));
