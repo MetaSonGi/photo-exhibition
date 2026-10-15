@@ -14,18 +14,130 @@ const state = {
   seq: 0,
 };
 /* 3D 전시관 공간 디자인 테마 */
+/* ---------- 절차적 재질 텍스처 (캔버스 페인팅) ---------- */
+function hexCss(h){ return '#' + h.toString(16).padStart(6, '0'); }
+function speckle(cx, S, n, a){
+  for (let i = 0; i < n; i++){
+    cx.fillStyle = Math.random() < .5 ? `rgba(0,0,0,${a})` : `rgba(255,255,255,${a})`;
+    cx.fillRect(Math.random()*S, Math.random()*S, 2, 2);
+  }
+}
+const TEX_PAINT = {
+  plaster(cx, base, S){ cx.fillStyle = base; cx.fillRect(0,0,S,S); speckle(cx, S, 3200, .05); },
+  concrete(cx, base, S){
+    cx.fillStyle = base; cx.fillRect(0,0,S,S); speckle(cx, S, 2200, .06);
+    for (let i = 0; i < 12; i++){
+      const x = Math.random()*S, y = Math.random()*S, r = 24 + Math.random()*70;
+      const g = cx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, 'rgba(0,0,0,0.10)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = g; cx.beginPath(); cx.arc(x, y, r, 0, 7); cx.fill();
+    }
+    cx.strokeStyle = 'rgba(0,0,0,0.10)'; cx.lineWidth = 2;
+    for (let y = 0; y <= S; y += 170){ cx.beginPath(); cx.moveTo(0, y); cx.lineTo(S, y); cx.stroke(); }
+  },
+  brick(cx, base, S){
+    cx.fillStyle = '#38302c'; cx.fillRect(0,0,S,S);
+    const bh = 32, bw = 86, cols = ['#7a4a38','#6e4232','#83503c','#75452f','#5f3a2c'];
+    for (let y = 0, row = 0; y < S; y += bh, row++)
+      for (let x = -bw; x < S + bw; x += bw){
+        const ox = (row % 2) * bw / 2;
+        cx.fillStyle = cols[(Math.random()*cols.length)|0];
+        cx.fillRect(x + ox + 2, y + 2, bw - 4, bh - 4);
+        cx.fillStyle = 'rgba(255,255,255,0.07)';
+        cx.fillRect(x + ox + 2, y + 2, bw - 4, 5);
+        cx.fillStyle = 'rgba(0,0,0,0.12)';
+        cx.fillRect(x + ox + 2, y + bh - 7, bw - 4, 5);
+      }
+    speckle(cx, S, 900, .05);
+  },
+  stone(cx, base, S){
+    cx.fillStyle = base; cx.fillRect(0,0,S,S); speckle(cx, S, 1800, .05);
+    const n = 3, s = S / n;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++){
+      cx.strokeStyle = 'rgba(0,0,0,0.28)'; cx.lineWidth = 3;
+      cx.strokeRect(i*s + 1, j*s + 1, s - 2, s - 2);
+      cx.strokeStyle = 'rgba(255,255,255,0.10)'; cx.lineWidth = 1;
+      cx.strokeRect(i*s + 5, j*s + 5, s - 10, s - 10);
+    }
+  },
+  wood(cx, base, S){
+    cx.fillStyle = base; cx.fillRect(0,0,S,S);
+    const pw = S / 6;
+    for (let p = 0; p < 6; p++){
+      cx.fillStyle = `rgba(0,0,0,${0.03 + Math.random()*0.09})`;
+      cx.fillRect(p*pw, 0, pw, S);
+      cx.strokeStyle = 'rgba(0,0,0,0.35)'; cx.lineWidth = 2;
+      cx.beginPath(); cx.moveTo(p*pw, 0); cx.lineTo(p*pw, S); cx.stroke();
+      cx.strokeStyle = 'rgba(0,0,0,0.13)'; cx.lineWidth = 1;
+      for (let gl = 0; gl < 7; gl++){
+        const gx = p*pw + 4 + Math.random()*(pw - 8);
+        cx.beginPath(); cx.moveTo(gx, 0);
+        cx.bezierCurveTo(gx + 9, S*0.3, gx - 9, S*0.6, gx + 5, S); cx.stroke();
+      }
+      cx.fillStyle = 'rgba(255,255,255,0.05)'; cx.fillRect(p*pw + 2, 0, 3, S);
+    }
+  },
+  hanji(cx, base, S){
+    cx.fillStyle = base; cx.fillRect(0,0,S,S);
+    for (let i = 0; i < 900; i++){
+      cx.strokeStyle = Math.random() < .5 ? 'rgba(120,100,70,0.10)' : 'rgba(255,255,255,0.12)';
+      cx.lineWidth = 1;
+      const x = Math.random()*S, y = Math.random()*S, a = Math.random()*Math.PI, l = 4 + Math.random()*10;
+      cx.beginPath(); cx.moveTo(x, y); cx.lineTo(x + Math.cos(a)*l, y + Math.sin(a)*l); cx.stroke();
+    }
+    cx.strokeStyle = 'rgba(90,70,50,0.20)'; cx.lineWidth = 3;
+    for (let k = 0; k <= 2; k++){
+      cx.beginPath(); cx.moveTo(k*S/2, 0); cx.lineTo(k*S/2, S); cx.stroke();
+      cx.beginPath(); cx.moveTo(0, k*S/2); cx.lineTo(S, k*S/2); cx.stroke();
+    }
+  },
+  marble(cx, base, S){
+    cx.fillStyle = base; cx.fillRect(0,0,S,S);
+    for (let v = 0; v < 14; v++){
+      cx.strokeStyle = `rgba(95,100,110,${0.10 + Math.random()*0.14})`;
+      cx.lineWidth = 1 + Math.random()*2;
+      let x = Math.random()*S, y = Math.random()*S;
+      cx.beginPath(); cx.moveTo(x, y);
+      for (let sg = 0; sg < 5; sg++){ x += (Math.random()-0.5)*170; y += (Math.random()-0.5)*170; cx.lineTo(x, y); }
+      cx.stroke();
+    }
+    speckle(cx, S, 500, .03);
+  },
+  metal(cx, base, S){
+    cx.fillStyle = base; cx.fillRect(0,0,S,S);
+    const pw = S / 4;
+    for (let p = 0; p < 4; p++){
+      const g = cx.createLinearGradient(p*pw, 0, (p+1)*pw, 0);
+      g.addColorStop(0, 'rgba(255,255,255,0.09)'); g.addColorStop(0.5, 'rgba(0,0,0,0.12)'); g.addColorStop(1, 'rgba(255,255,255,0.09)');
+      cx.fillStyle = g; cx.fillRect(p*pw, 0, pw, S);
+      cx.fillStyle = 'rgba(0,0,0,0.45)'; cx.fillRect(p*pw, 0, 2, S);
+    }
+    speckle(cx, S, 600, .04);
+  },
+};
+function texCanvas(painter, baseCss){
+  const cv = document.createElement('canvas'); cv.width = cv.height = 512;
+  (TEX_PAINT[painter] || TEX_PAINT.plaster)(cv.getContext('2d'), baseCss, 512);
+  return cv;
+}
+function tiledTex(cv, rx, ry){
+  const t = new THREE.CanvasTexture(cv);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry);
+  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
 const WALK_THEMES = {
-  whitecube:  { label:'화이트큐브', bg:0x0e0e10, fog:[0x0e0e10,14,34], wall:0xece5d8, floor:0x8a6f52, ceil:0x17171a, hemi:[0xfff6e8,0x2a2a30], lamp:0xffe2b0, lampI:0.55 },
-  darkmood:   { label:'다크 무드', bg:0x060607, fog:[0x060607,11,28], wall:0x232328, floor:0x141416, ceil:0x0b0b0d, hemi:[0xa9bdf5,0x14151c], lamp:0xa9bdf5, lampI:0.7 },
-  industrial: { label:'인더스트리얼', bg:0x131210, fog:[0x131210,13,32], wall:0x53524e, floor:0x3c3833, ceil:0x232220, hemi:[0xffd9a0,0x2e271c], lamp:0xffc37a, lampI:0.6 },
-  minimal:    { label:'미니멀 화이트', bg:0xcfd4d8, fog:[0xcfd4d8,16,40], wall:0xf7f4ee, floor:0xc9b795, ceil:0xe9e5db, hemi:[0xffffff,0x9a8f7c], lamp:0xfff3de, lampI:0.5 },
-  sunset:     { label:'선셋', bg:0x160d08, fog:[0x160d08,12,30], wall:0x6b4a35, floor:0x2e1f16, ceil:0x100b07, hemi:[0xffb37a,0x2a1a10], lamp:0xff9a5c, lampI:0.62 },
-  louvre:     { label:'루브르 클래식', bg:0x141009, fog:[0x141009,13,32], wall:0xd9c9a8, floor:0x6b4f35, ceil:0x241c12, hemi:[0xffe8c0,0x3a2a18], lamp:0xffd9a0, lampI:0.55 },
-  guggenheim: { label:'구겐하임', bg:0x101216, fog:[0x101216,15,38], wall:0xf0efe9, floor:0xb9bcb4, ceil:0xdfe0da, hemi:[0xf2f5ff,0x8a8f96], lamp:0xeef2ff, lampI:0.5 },
-  tate:       { label:'테이트 모던', bg:0x0d0c0b, fog:[0x0d0c0b,12,30], wall:0x6e4a3a, floor:0x35322e, ceil:0x1a1917, hemi:[0xd8e2f0,0x2a2622], lamp:0xdce8ff, lampI:0.55 },
-  pompidou:   { label:'퐁피두', bg:0x0a0c10, fog:[0x0a0c10,12,30], wall:0x2e3440, floor:0x1c1e24, ceil:0x14161c, hemi:[0xbcd0ff,0x1a2030], lamp:0xcfe0ff, lampI:0.6 },
-  orsay:      { label:'오르세', bg:0x120e08, fog:[0x120e08,13,32], wall:0xe5d9c0, floor:0x7a5c3a, ceil:0x2a2118, hemi:[0xffe2b0,0x3a2c1c], lamp:0xffc98a, lampI:0.55 },
-  hanok:      { label:'한옥 갤러리', bg:0x0f0c08, fog:[0x0f0c08,12,30], wall:0xe8dcc0, floor:0x4a382c, ceil:0x241a12, hemi:[0xffdfae,0x33241a], lamp:0xffbe78, lampI:0.58 },
+  whitecube:  { label:'화이트큐브', bg:0x0e0e10, fog:[0x0e0e10,14,34], wall:0xece5d8, floor:0x8a6f52, ceil:0x17171a, hemi:[0xfff6e8,0x2a2a30], lamp:0xffe2b0, lampI:0.55, wallTex:'plaster', floorTex:'concrete' },
+  darkmood:   { label:'다크 무드', bg:0x060607, fog:[0x060607,11,28], wall:0x232328, floor:0x141416, ceil:0x0b0b0d, hemi:[0xa9bdf5,0x14151c], lamp:0xa9bdf5, lampI:0.7, wallTex:'concrete', floorTex:'wood' },
+  industrial: { label:'인더스트리얼', bg:0x131210, fog:[0x131210,13,32], wall:0x53524e, floor:0x3c3833, ceil:0x232220, hemi:[0xffd9a0,0x2e271c], lamp:0xffc37a, lampI:0.6, wallTex:'concrete', floorTex:'concrete' },
+  minimal:    { label:'미니멀 화이트', bg:0xcfd4d8, fog:[0xcfd4d8,16,40], wall:0xf7f4ee, floor:0xc9b795, ceil:0xe9e5db, hemi:[0xffffff,0x9a8f7c], lamp:0xfff3de, lampI:0.5, wallTex:'plaster', floorTex:'wood' },
+  sunset:     { label:'선셋', bg:0x160d08, fog:[0x160d08,12,30], wall:0x6b4a35, floor:0x2e1f16, ceil:0x100b07, hemi:[0xffb37a,0x2a1a10], lamp:0xff9a5c, lampI:0.62, wallTex:'plaster', floorTex:'wood' },
+  louvre:     { label:'루브르 클래식', bg:0x141009, fog:[0x141009,13,32], wall:0xd9c9a8, floor:0x6b4f35, ceil:0x241c12, hemi:[0xffe8c0,0x3a2a18], lamp:0xffd9a0, lampI:0.55, wallTex:'stone', floorTex:'wood' },
+  guggenheim: { label:'구겐하임', bg:0x101216, fog:[0x101216,15,38], wall:0xf0efe9, floor:0xb9bcb4, ceil:0xdfe0da, hemi:[0xf2f5ff,0x8a8f96], lamp:0xeef2ff, lampI:0.5, wallTex:'plaster', floorTex:'marble' },
+  tate:       { label:'테이트 모던', bg:0x0d0c0b, fog:[0x0d0c0b,12,30], wall:0x6e4a3a, floor:0x35322e, ceil:0x1a1917, hemi:[0xd8e2f0,0x2a2622], lamp:0xdce8ff, lampI:0.55, wallTex:'brick', floorTex:'concrete' },
+  pompidou:   { label:'퐁피두', bg:0x0a0c10, fog:[0x0a0c10,12,30], wall:0x2e3440, floor:0x1c1e24, ceil:0x14161c, hemi:[0xbcd0ff,0x1a2030], lamp:0xcfe0ff, lampI:0.6, wallTex:'metal', floorTex:'concrete' },
+  orsay:      { label:'오르세', bg:0x120e08, fog:[0x120e08,13,32], wall:0xe5d9c0, floor:0x7a5c3a, ceil:0x2a2118, hemi:[0xffe2b0,0x3a2c1c], lamp:0xffc98a, lampI:0.55, wallTex:'plaster', floorTex:'wood' },
+  hanok:      { label:'한옥 갤러리', bg:0x0f0c08, fog:[0x0f0c08,12,30], wall:0xe8dcc0, floor:0x4a382c, ceil:0x241a12, hemi:[0xffdfae,0x33241a], lamp:0xffbe78, lampI:0.58, wallTex:'hanji', floorTex:'wood' },
 };
 let walkCleanup = null;
 let carCleanup = null;
@@ -838,17 +950,19 @@ function renderWalkthrough(g, items){
     scene.add(sp); scene.add(sp.target);
   }
 
-  const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(hallW, hallD),
-    new THREE.MeshStandardMaterial({ color: theme.floor, roughness: .3, metalness: .12 }));
+  const wallCv = texCanvas(theme.wallTex || 'plaster', hexCss(theme.wall));
+  const floorCv = texCanvas(theme.floorTex || 'concrete', hexCss(theme.floor));
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .3, metalness: .12, map: tiledTex(floorCv, 12, 12) });
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(hallW, hallD), floorMat);
   floor.rotation.x = -Math.PI/2; scene.add(floor);
   const ceil = new THREE.Mesh(
     new THREE.PlaneGeometry(hallW, hallD),
     new THREE.MeshStandardMaterial({ color: theme.ceil, roughness: 1 }));
   ceil.rotation.x = Math.PI/2; ceil.position.y = HH; scene.add(ceil);
-  const wallMat = new THREE.MeshStandardMaterial({ color: theme.wall, roughness: .95 });
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .95, map: tiledTex(wallCv, 5, 1.4) });
+  const wallMatOuter = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .95, map: tiledTex(wallCv, 30, 3) });
   const mkWall = (w, h, x, y, z, ry) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), wallMat);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), wallMatOuter);
     m.position.set(x, y, z); m.rotation.y = ry; scene.add(m);
   };
   mkWall(hallW, HH, 0, HH/2, -hd, 0);
@@ -1161,7 +1275,7 @@ function renderWalkthrough(g, items){
     if (walkJoyCleanup){ window.removeEventListener('touchend', walkJoyCleanup); window.removeEventListener('touchcancel', walkJoyCleanup); walkJoyCleanup = null; }
     if (joyEl && joyEl.parentNode) joyEl.parentNode.removeChild(joyEl);
     const sharedGeo = new Set([...Object.values(geoCache), frameGeo, photoGeo]);
-    const sharedMat = new Set([frameMat, wallMat, stripMat, glowMat]);
+    const sharedMat = new Set([frameMat, wallMat, wallMatOuter, floorMat, stripMat, glowMat]);
     scene.traverse(o => {
       if (o.geometry && !sharedGeo.has(o.geometry)) o.geometry.dispose();
       if (o.material){ [].concat(o.material).forEach(m => { m.map?.dispose?.(); if (!sharedMat.has(m)) m.dispose(); }); }
