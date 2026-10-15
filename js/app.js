@@ -27,6 +27,31 @@ function toast(msg){
 }
 function slug(s){ return String(s).toLowerCase().replace(/[^a-z0-9가-힣]+/g,'-'); }
 
+/* ---------- 전시품 로컬 저장 (새로고침해도 유지) ---------- */
+let itemsReady = false;
+function saveItems(){
+  if (!itemsReady) return;
+  try{ localStorage.setItem('ex_items_' + slug(state.config.title), JSON.stringify(state.items)); }
+  catch(e){}
+}
+function loadItems(){
+  try{
+    const arr = JSON.parse(localStorage.getItem('ex_items_' + slug(state.config.title)) || '[]');
+    if (!Array.isArray(arr)) return;
+    let dropped = 0;
+    state.items = arr.filter(it => {
+      if (it && it.url && String(it.url).startsWith('blob:')){ dropped++; return false; }
+      return it && it.url;
+    });
+    state.seq = state.items.reduce((m, it) => {
+      const n = parseInt(String(it.id || '').replace(/\D/g, ''), 10);
+      return n > m ? n : m;
+    }, 0);
+    if (dropped) setTimeout(() => toast(`직접 올린 파일 ${dropped}장은 새로고침 후 사라졌어요. 다시 올려주세요`), 800);
+  }catch(e){}
+  itemsReady = true;
+}
+
 /* ---------- 설정 ---------- */
 async function loadConfig(){
   try{
@@ -94,7 +119,7 @@ function onFilesChosen(e){
 }
 
 /* ---------- 갤러리 ---------- */
-function renderAll(){ renderGallery(); renderCriteriaBar(); }
+function renderAll(){ renderGallery(); renderCriteriaBar(); saveItems(); }
 function renderGallery(){
   if (walkCleanup){ walkCleanup(); walkCleanup = null; }
   if (carCleanup){ carCleanup(); carCleanup = null; }
@@ -362,7 +387,7 @@ function bindEditable(g){
     el.addEventListener('click', e => e.stopPropagation());
     el.addEventListener('blur', () => {
       const it = state.items.find(x => x.id === el.dataset.id);
-      if (it) it[el.dataset.f] = el.textContent.trim();
+      if (it){ it[el.dataset.f] = el.textContent.trim(); saveItems(); }
     });
     el.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); el.blur(); } });
   });
@@ -792,11 +817,13 @@ function setupDrop(){
 /* ---------- 초기화 ---------- */
 function init(){
   loadConfig().then(() => {
+    loadItems();
     // 전시 제목 인라인 편집
     const h1 = $('#exTitle');
     h1.addEventListener('blur', () =>
       localStorage.setItem('ex_title_' + slug(state.config.title), h1.textContent.trim()));
     h1.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); h1.blur(); } });
+    renderAll();
   });
 
   $('#btnFolder').addEventListener('click', () => $('#folderInput').click());
