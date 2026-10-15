@@ -132,6 +132,22 @@ body.dark .styleswitch button.active{background:var(--accent);border-color:var(-
   position:absolute;left:50%;top:50%;width:48px;height:48px;border-radius:50%;
   background:rgba(201,162,39,.75);transform:translate(-50%,-50%);
 }
+/* ---------- 3D 공간 설정 / 작품 편집 ---------- */
+.style-note{font-size:13px;color:var(--muted);padding:6px 4px;display:block}
+.modal-card.wide{width:min(640px,94vw)}
+.set-row{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.set-row label{flex:0 0 110px;font-size:13px;font-weight:600;color:var(--ink)}
+.set-row input[type=range]{flex:1;accent-color:var(--accent)}
+.set-val{flex:0 0 52px;font-size:13px;color:var(--muted);text-align:right}
+.set-themes{display:flex;gap:8px;flex-wrap:wrap}
+.edit-list{max-height:46vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;margin:6px 0 4px}
+.edit-row{display:flex;gap:12px;align-items:flex-start;background:rgba(0,0,0,.03);border:1px solid var(--line);border-radius:10px;padding:10px}
+body.dark .edit-row{background:rgba(255,255,255,.04)}
+.edit-row img{width:64px;height:64px;object-fit:cover;border-radius:8px;flex:0 0 64px;background:#222}
+.edit-vid{width:64px;height:64px;flex:0 0 64px;border-radius:8px;background:#1c1c20;color:#c9a227;display:flex;align-items:center;justify-content:center;font-size:20px}
+.edit-fields{flex:1;display:flex;flex-direction:column;gap:6px;min-width:0}
+.edit-no{font-size:11px;color:var(--muted)}
+.edit-fields .textin{margin-bottom:0}
 
 /* ---------- magazine ---------- */
 .g-magazine{max-width:900px;margin-left:auto;margin-right:auto}

@@ -31,16 +31,7 @@
 <input type="file" id="fileInput" accept="image/*,video/*" multiple hidden>
 
 <nav class="styleswitch" id="styleSwitch">
-  <button data-style="walkthrough" class="active">🚶 3D 전시관</button>
-  <button data-style="whitecube">⬜ 화이트큐브</button>
-  <button data-style="darkroom">🌑 다크룸</button>
-  <button data-style="projector">📽️ 프로젝터</button>
-  <button data-style="magazine">📰 매거진</button>
-  <button data-style="bento">🍱 벤토</button>
-  <button data-style="hscroll">↔️ 가로스크롤</button>
-  <button data-style="marquee">🎞️ 마퀴</button>
-  <button data-style="carousel">🌀 3D 캐러셀</button>
-  <button data-style="polaroid">📸 폴라로이드</button>
+  <span class="style-note">🚶 3D 전시관 — 드래그로 둘러보고 W A S D로 걸어다니세요</span>
 </nav>
 
 <div class="criteria" id="criteriaBar" hidden></div>
@@ -125,6 +116,57 @@
       <span class="spacer"></span>
       <button class="btn ghost sm" id="btnLinkClose">닫기</button>
       <button class="btn primary sm" id="btnFolderAdd">폴더 가져오기</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="spaceModal" hidden>
+  <div class="modal-card">
+    <h2>⚙️ 3D 공간 설정</h2>
+    <div class="set-row">
+      <label>공간 디자인</label>
+      <div class="set-themes" id="spaceThemes"></div>
+    </div>
+    <div class="set-row">
+      <label>조명 밝기</label>
+      <input type="range" id="setLight" min="30" max="200" step="5" value="100">
+      <span class="set-val" id="setLightV">100%</span>
+    </div>
+    <div class="set-row">
+      <label>이동 속도</label>
+      <input type="range" id="setSpeed" min="50" max="250" step="10" value="100">
+      <span class="set-val" id="setSpeedV">100%</span>
+    </div>
+    <hr class="sep">
+    <div class="set-row">
+      <label>🔊 공간 사운드</label>
+      <button class="btn sm" id="setAmbToggle">켜짐</button>
+    </div>
+    <div class="set-row">
+      <label>사운드 볼륨</label>
+      <input type="range" id="setAmbVol" min="0" max="100" step="5" value="50">
+      <span class="set-val" id="setAmbVolV">50%</span>
+    </div>
+    <div class="set-row">
+      <label>🔔 공간 차임</label>
+      <button class="btn sm" id="setChimeToggle">켜짐</button>
+    </div>
+    <div class="modal-actions">
+      <span class="spacer"></span>
+      <button class="btn ghost sm" id="btnSpaceClose">닫기</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="editModal" hidden>
+  <div class="modal-card wide">
+    <h2>📝 작품 정보 편집</h2>
+    <p class="hint">제목과 설명을 고치면 전시장 캡션과 3D 명판에 바로 반영됩니다.</p>
+    <input type="search" id="editSearch" class="textin" placeholder="🔍 제목 검색…">
+    <div id="editList" class="edit-list"></div>
+    <div class="modal-actions">
+      <span class="spacer"></span>
+      <button class="btn ghost sm" id="btnEditClose">닫기</button>
     </div>
   </div>
 </div>

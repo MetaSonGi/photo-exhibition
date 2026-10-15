@@ -10,6 +10,7 @@ const state = {
   items: [],
   style: 'walkthrough',
   walkTheme: 'whitecube',
+  space: { light: 1, speed: 1 },
   seq: 0,
 };
 /* 3D 전시관 공간 디자인 테마 */
@@ -81,6 +82,79 @@ async function loadConfig(){
     const wt = localStorage.getItem('ex_wtheme_' + slug(c.title));
     if (wt && WALK_THEMES[wt]) state.walkTheme = wt;
   }catch(e){}
+  try{
+    const sp = JSON.parse(localStorage.getItem('ex_space_' + slug(c.title)) || 'null');
+    if (sp){ if (sp.light > 0) state.space.light = sp.light; if (sp.speed > 0) state.space.speed = sp.speed; }
+    const au = JSON.parse(localStorage.getItem('ex_amb_' + slug(c.title)) || 'null');
+    if (au){ if (typeof au.on === 'boolean') amb.on = au.on; if (au.vol >= 0) amb.vol = au.vol; if (typeof au.chime === 'boolean') amb.chime = au.chime; }
+  }catch(e){}
+}
+function saveSpace(){
+  try{
+    localStorage.setItem('ex_space_' + slug(state.config.title), JSON.stringify(state.space));
+    localStorage.setItem('ex_amb_' + slug(state.config.title), JSON.stringify({ on: amb.on, vol: amb.vol, chime: amb.chime }));
+  }catch(e){}
+}
+
+/* ---------- 3D 공간 설정 ---------- */
+function openSpaceModal(){
+  const st = $('#spaceThemes');
+  st.innerHTML = Object.entries(WALK_THEMES).map(([k, t]) =>
+    `<button class="btn sm${k === state.walkTheme ? ' primary' : ''}" data-stheme="${k}">${t.label}</button>`).join('');
+  st.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    state.walkTheme = b.dataset.stheme;
+    localStorage.setItem('ex_wtheme_' + slug(state.config.title), state.walkTheme);
+    openSpaceModal(); renderGallery();
+    toast(`${WALK_THEMES[state.walkTheme].label} 공간으로 바꿨어요`);
+  }));
+  $('#setLight').value = Math.round(state.space.light * 100);
+  $('#setLightV').textContent = Math.round(state.space.light * 100) + '%';
+  $('#setSpeed').value = Math.round(state.space.speed * 100);
+  $('#setSpeedV').textContent = Math.round(state.space.speed * 100) + '%';
+  syncAmbUI();
+  $('#spaceModal').hidden = false;
+}
+function syncAmbUI(){
+  $('#setAmbToggle').textContent = amb.on ? '🔊 켜짐' : '🔇 꺼짐';
+  $('#setAmbVol').value = amb.vol;
+  $('#setAmbVolV').textContent = amb.vol + '%';
+  $('#setChimeToggle').textContent = amb.chime ? '🔔 켜짐' : '🔕 꺼짐';
+}
+
+/* ---------- 작품 정보 편집 ---------- */
+function openEditModal(){
+  $('#editSearch').value = '';
+  renderEditList('');
+  $('#editModal').hidden = false;
+}
+function renderEditList(q){
+  const list = $('#editList');
+  const query = (q || '').trim();
+  const rows = state.items
+    .map((it, i) => ({ it, i }))
+    .filter(({ it }) => !query || (it.title || '').includes(query));
+  list.innerHTML = rows.map(({ it, i }) => {
+    const thumb = it.type === 'image'
+      ? (it.source === 'drive' ? String(it.url).replace('sz=w1920', 'sz=w200') : it.url) : '';
+    return `<div class="edit-row">
+      ${thumb ? `<img src="${esc(thumb)}" alt="" loading="lazy">` : `<div class="edit-vid">▶</div>`}
+      <div class="edit-fields">
+        <div class="edit-no">No.${i + 1}${it.type === 'video' ? ' · 영상' : ''}</div>
+        <input class="textin et" data-id="${it.id}" data-f="title" value="${esc(it.title)}" placeholder="제목">
+        <input class="textin ed" data-id="${it.id}" data-f="desc" value="${esc(it.desc)}" placeholder="설명">
+      </div>
+    </div>`;
+  }).join('') || '<p class="hint">검색 결과가 없어요.</p>';
+  list.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const it = state.items.find(x => x.id === inp.dataset.id);
+      if (it){ it[inp.dataset.f] = inp.value; saveItems(); }
+    });
+  });
+}
+function closeEditModal(){
+  $('#editModal').hidden = true;
+  renderGallery(); // 3D 명판에 반영
 }
 
 /* ---------- 미디어 로드 ---------- */
@@ -142,23 +216,16 @@ function renderAll(){ renderGallery(); renderCriteriaBar(); saveItems(); }
 function renderGallery(){
   if (walkCleanup){ walkCleanup(); walkCleanup = null; }
   if (carCleanup){ carCleanup(); carCleanup = null; }
-  document.body.classList.toggle('dark', state.style === 'darkroom');
+  document.body.classList.remove('dark');
   const g = $('#gallery');
   const items = state.items;
   $('#emptyState').style.display = items.length ? 'none' : 'block';
   g.style.display = items.length ? '' : 'none';
   if (!items.length) return;
 
-  if (state.style === 'projector'){
-    setActiveNav('whitecube'); state.style = 'whitecube';
-    openProjector(); renderGallery(); return;
-  }
-  g.className = 'gallery fade g-' + state.style;
-  ({
-    whitecube: renderWhiteCube, darkroom: renderDarkroom, walkthrough: renderWalkthrough,
-    magazine: renderMagazine, bento: renderBento, hscroll: renderHScroll,
-    marquee: renderMarquee, carousel: renderCarousel, polaroid: renderPolaroid,
-  })[state.style](g, items);
+  state.style = 'walkthrough';
+  g.className = 'gallery fade g-walkthrough';
+  renderWalkthrough(g, items);
 }
 function setActiveNav(style){
   document.querySelector('#styleSwitch .active')?.classList.remove('active');
@@ -415,14 +482,14 @@ function bindEditable(g){
 /* ---------- 3D 전시관 워크스루 ---------- */
 
 /* 3D 공간 음향: 은은한 앰비언트 패드 + 방향성 차임 (WebAudio, HRTF 패닝) */
-const amb = { ctx:null, master:null, on:true };
+const amb = { ctx:null, master:null, on:true, vol:50, chime:true };
 function ambienceInit(){
   if (amb.ctx) return;
   const AC = window.AudioContext || window.webkitAudioContext;
   if (!AC) return;
   try{
     const ctx = new AC(); amb.ctx = ctx;
-    const master = ctx.createGain(); master.gain.value = 0.13; master.connect(ctx.destination);
+    const master = ctx.createGain(); master.gain.value = (amb.vol / 100) * 0.26; master.connect(ctx.destination);
     amb.master = master;
     // 앰비언트 패드 (C3·G3·C4, 로우패스 + 느린 LFO)
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420; lp.connect(master);
@@ -443,7 +510,7 @@ function ambienceInit(){
       else pan.setPosition(x, 2, z);
       pan.connect(master);
       const play = () => {
-        if (!amb.on || !amb.ctx) return;
+        if (!amb.on || !amb.chime || !amb.ctx) return;
         const t = ctx.currentTime;
         const o = ctx.createOscillator(); o.type = 'sine';
         o.frequency.value = base * (Math.random() < 0.5 ? 1 : 1.5);
@@ -474,23 +541,25 @@ function ambienceUpdate(camera, yaw, pitch){
     }
   }catch(e){}
 }
+function ambienceApplyVol(){
+  if (amb.ctx && amb.master) amb.master.gain.value = (amb.vol / 100) * 0.26;
+}
 function ambienceSet(on){
   amb.on = on;
   if (amb.ctx){ on ? amb.ctx.resume().catch(()=>{}) : amb.ctx.suspend().catch(()=>{}); }
+  saveSpace();
 }
 
 function renderWalkthrough(g, items){
   if (typeof THREE === 'undefined'){ toast('3D 라이브러리를 불러오지 못했어요'); return; }
   const theme = WALK_THEMES[state.walkTheme] || WALK_THEMES.whitecube;
-  const themeBtns = Object.entries(WALK_THEMES).map(([k, t]) =>
-    `<button class="btn sm${k === state.walkTheme ? ' primary' : ''}" data-wtheme="${k}">${t.label}</button>`).join('');
   g.innerHTML = `
     <div class="walk-ui">
       <button class="btn" id="btnTour">🎧 도슨트 투어</button>
-      <button class="btn" id="btnSound">${amb.on ? '🔊 공간음향' : '🔇 음향꺼짐'}</button>
+      <button class="btn" id="btnSpace">⚙️ 공간 설정</button>
+      <button class="btn" id="btnEdit">📝 작품 편집</button>
       <button class="btn" id="btnWalkHelp">❔ 조작법</button>
     </div>
-    <div class="walk-ui walk-themes"><span class="walk-themes-label">🎨 공간 디자인</span>${themeBtns}</div>
     <div class="walk-hint">드래그: 시점 회전 · W A S D: 이동 · 작품 클릭: 크게 보기</div>
     <div class="walk-loading" id="walkLoading">
       <div class="walk-loading-t">🖼️ 전시장을 준비하는 중…</div>
@@ -530,7 +599,7 @@ function renderWalkthrough(g, items){
     camera.position.set(0, EYE, spawnZ);
   }
 
-  scene.add(new THREE.HemisphereLight(theme.hemi[0], theme.hemi[1], 0.95));
+  scene.add(new THREE.HemisphereLight(theme.hemi[0], theme.hemi[1], 0.95 * state.space.light));
   // 천장 조명 스트립 + 스포트라이트 (작품 조명)
   const stripMat = new THREE.MeshBasicMaterial({ color: theme.lamp });
   const stripGeo = new THREE.BoxGeometry(rowW, 0.09, 1.4);
@@ -543,7 +612,7 @@ function renderWalkthrough(g, items){
     const glow = new THREE.Mesh(glowGeo, glowMat);
     glow.rotation.x = Math.PI / 2; glow.position.set(0, HH - 0.5, z); scene.add(glow);
     for (const sx of [-rowW / 4, rowW / 4]){
-      const sp = new THREE.SpotLight(theme.lamp, theme.lampI * 1.6, 34, 0.62, 0.45, 1.1);
+      const sp = new THREE.SpotLight(theme.lamp, theme.lampI * 1.6 * state.space.light, 34, 0.62, 0.45, 1.1);
       sp.position.set(sx, HH - 0.3, z);
       sp.target.position.set(sx, 1.1, z);
       scene.add(sp); scene.add(sp.target);
@@ -767,17 +836,8 @@ function renderWalkthrough(g, items){
   });
   $('#btnWalkHelp').addEventListener('click', () =>
     toast('드래그: 둘러보기 · W A S D / 방향키: 이동 · 조이스틱(모바일): 이동 · 작품 클릭: 크게 보기'));
-  $('#btnSound').addEventListener('click', () => {
-    ambienceSet(!amb.on);
-    $('#btnSound').textContent = amb.on ? '🔊 공간음향' : '🔇 음향꺼짐';
-    if (amb.on) toast('3D 공간 음향을 켰어요');
-  });
-  g.querySelectorAll('[data-wtheme]').forEach(b => b.addEventListener('click', () => {
-    state.walkTheme = b.dataset.wtheme;
-    localStorage.setItem('ex_wtheme_' + slug(state.config.title), state.walkTheme);
-    renderGallery();
-    toast(`${WALK_THEMES[state.walkTheme].label} 공간으로 바꿨어요 — 이제 기본 공간으로 저장됩니다`);
-  }));
+  $('#btnSpace').addEventListener('click', openSpaceModal);
+  $('#btnEdit').addEventListener('click', openEditModal);
 
   const fwd = new THREE.Vector3(), rgt = new THREE.Vector3(), cdir = new THREE.Vector3();
   let raf = 0, alive = true, last = performance.now(), frame = 0;
@@ -800,7 +860,7 @@ function renderWalkthrough(g, items){
       const d = new THREE.Vector3().subVectors(lookTarget, camera.position);
       yaw = Math.atan2(-d.x, -d.z); pitch = Math.atan2(d.y, Math.hypot(d.x, d.z));
     } else {
-      const sp = 3.6 * dt;
+      const sp = 3.6 * dt * state.space.speed;
       fwd.set(-Math.sin(yaw), 0, -Math.cos(yaw));
       rgt.set(-fwd.z, 0, fwd.x);
       if (keys['w'] || keys['arrowup']) camera.position.addScaledVector(fwd, sp);
@@ -1146,6 +1206,32 @@ function init(){
   $('#criteriaModal').addEventListener('click', e => { if (e.target.id === 'criteriaModal') e.target.hidden = true; });
   $('#btnCritSave').addEventListener('click', saveCriteria);
 
+  $('#btnSpaceClose').addEventListener('click', () => $('#spaceModal').hidden = true);
+  $('#spaceModal').addEventListener('click', e => { if (e.target.id === 'spaceModal') e.target.hidden = true; });
+  $('#setLight').addEventListener('input', e => {
+    state.space.light = e.target.value / 100;
+    $('#setLightV').textContent = e.target.value + '%';
+  });
+  $('#setLight').addEventListener('change', () => { saveSpace(); renderGallery(); });
+  $('#setSpeed').addEventListener('input', e => {
+    state.space.speed = e.target.value / 100;
+    $('#setSpeedV').textContent = e.target.value + '%';
+    saveSpace();
+  });
+  $('#setAmbToggle').addEventListener('click', () => { ambienceSet(!amb.on); syncAmbUI(); });
+  $('#setAmbVol').addEventListener('input', e => {
+    amb.vol = +e.target.value;
+    $('#setAmbVolV').textContent = amb.vol + '%';
+    ambienceApplyVol(); saveSpace();
+  });
+  $('#setChimeToggle').addEventListener('click', () => {
+    amb.chime = !amb.chime; syncAmbUI(); saveSpace();
+    toast(amb.chime ? '공간 차임을 켰어요' : '공간 차임을 껐어요');
+  });
+  $('#btnEditClose').addEventListener('click', closeEditModal);
+  $('#editModal').addEventListener('click', e => { if (e.target.id === 'editModal') closeEditModal(); });
+  $('#editSearch').addEventListener('input', e => renderEditList(e.target.value));
+
   $('#btnAi').addEventListener('click', () => {
     $('#aiKeyInput').value = getAiKey();
     $('#aiModal').hidden = false;
@@ -1159,12 +1245,6 @@ function init(){
   });
   $('#lbAiDesc').addEventListener('click', autoDescribeCurrent);
 
-  $('#styleSwitch').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
-    setActiveNav(b.dataset.style);
-    state.style = b.dataset.style;
-    renderGallery();
-    $('#gallery').scrollIntoView({ behavior:'smooth', block:'start' });
-  }));
 
   $('#lbClose').addEventListener('click', closeLightbox);
   $('#lbPrev').addEventListener('click', () => lbNav(-1));
