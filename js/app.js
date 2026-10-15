@@ -317,9 +317,15 @@ function renderCriteriaBar(){
   bar.hidden = false;
   let cls = 'ok', html = `🖼️ ${n}장 · 기준 ${min}~${max}장`;
   if (n < min){ cls = 'warn'; html = `⚠️ 최소 ${min}장이 필요해요 — 현재 ${n}장, ${min - n}장 더 걸어주세요`; }
-  else if (n > max){ cls = 'warn'; html = `⚠️ 최대 ${max}장을 초과했어요 — 현재 ${n}장 <button class="btn sm" id="btnTrim">앞 ${max}장만 남기기</button>`; }
+  else if (n > max){ cls = 'warn'; html = `⚠️ 최대 ${max}장을 초과했어요 — 현재 ${n}장 <button class="btn sm" id="btnRaiseMax">기준을 ${n}장으로 늘리기</button> <button class="btn sm" id="btnTrim">앞 ${max}장만 남기기</button>`; }
   bar.className = 'criteria ' + cls;
   bar.innerHTML = html;
+  $('#btnRaiseMax')?.addEventListener('click', () => {
+    state.criteria.max = Math.max(state.criteria.max, state.items.length);
+    localStorage.setItem('ex_crit_' + slug(state.config.title), JSON.stringify(state.criteria));
+    renderAll();
+    toast(`전시 기준을 ${state.criteria.min}~${state.criteria.max}장으로 늘렸어요`);
+  });
   $('#btnTrim')?.addEventListener('click', () => {
     state.items = state.items.slice(0, max);
     renderAll();
@@ -732,7 +738,7 @@ async function importDriveFolder(){
   try{
     const media = [];
     async function walk(id, depth, path){
-      if (depth > 2 || media.length >= 150) return;
+      if (depth > 2 || media.length >= 500) return;
       const children = await listDriveChildren(id, key);
       for (const f of children){
         if (/^(image|video)\//.test(f.mimeType || '')) media.push({ ...f, path });
@@ -759,6 +765,7 @@ async function importDriveFolder(){
     $('#linkModal').hidden = true;
     renderAll();
     toast(`${media.length}점을 가져왔어요`);
+    setTimeout(() => $('#gallery')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
   }catch(e){
     toast(e.message === 'key'
       ? 'API 키가 올바르지 않아요. 키를 확인해 주세요'
