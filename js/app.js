@@ -1,11 +1,11 @@
-/* 사진전시관 — 다섯 개의 방 */
+/* 사진전시관 — 사진작가를 위한 3D 전시 공간 */
 'use strict';
 
 const IMG_EXT = ['jpg','jpeg','png','webp','gif','bmp'];
 const VID_EXT = ['mp4','webm','mov','m4v'];
 
 const state = {
-  config: { title:'사진전시관', subtitle:'다섯 개의 방에 거는 사진들', accent:'#c9a227', accent2:'#e8c874', artist:'MetaSongi', year:'2026', bio:'', contact:'' },
+  config: { title:'사진전시관', subtitle:'사진작가를 위한 3D 전시 공간', accent:'#c9a227', accent2:'#e8c874', artist:'MetaSongi', year:'2026', bio:'', contact:'' },
   criteria: { min: 4, max: 100 },
   items: [],
   style: 'walkthrough',
@@ -526,6 +526,7 @@ function renderGallery(){
   document.body.classList.remove('dark');
   const g = $('#gallery');
   const items = state.items;
+  document.body.classList.toggle('exhibiting', items.length > 0);
   $('#emptyState').style.display = items.length ? 'none' : 'block';
   g.style.display = items.length ? '' : 'none';
   if (!items.length) return;
@@ -937,6 +938,17 @@ function renderWalkthrough(g, items){
       <button class="btn sm" id="btnEdit">📝 작품 편집</button>
       <button class="btn sm" id="btnWalkHelp">❔ 조작법</button>
       <button class="btn sm" id="btnFull">⛶ 전체화면</button>
+      <button class="btn sm" id="btnViewReset" title="시점을 입구로 되돌리기">⌂ 시점</button>
+      <button class="btn sm" id="btnWalkMenu" title="가져오기·설정 메뉴">☰</button>
+    </div>
+    <div class="walk-menu" id="walkMenu" hidden>
+      <button class="btn sm" id="btnWFolder">📁 폴더 열기</button>
+      <button class="btn sm" id="btnWFiles">💻 파일 올리기</button>
+      <button class="btn sm" id="btnWLink">🔗 링크 가져오기</button>
+      <button class="btn sm" id="btnWDemo">✨ 데모 전시</button>
+      <button class="btn sm" id="btnWAi">🤖 AI 설명</button>
+      <button class="btn sm" id="btnWInfo">🖋️ 전시 정보</button>
+      <button class="btn sm" id="btnWCriteria">⚙️ 전시 기준</button>
     </div>
     <div class="walk-hint">드래그: 시점 회전 · W A S D: 이동 · 작품 클릭: 크게 보기</div>
     <div class="walk-loading" id="walkLoading">
@@ -1396,6 +1408,17 @@ function renderWalkthrough(g, items){
     toast('드래그: 둘러보기 · W A S D / 방향키: 이동 · 조이스틱(모바일): 이동 · 작품 클릭: 크게 보기'));
   $('#btnSpace').addEventListener('click', openSpaceModal);
   $('#btnEdit').addEventListener('click', openEditModal);
+  $('#btnViewReset').addEventListener('click', () => {
+    walkView.valid = false;
+    if (layout === 'rotunda') camera.position.set(0, EYE, 0);
+    else camera.position.set(0, EYE, spawnZ);
+    yaw = 0; pitch = 0;
+    toast('시점을 입구로 되돌렸어요');
+  });
+  $('#btnWalkMenu').addEventListener('click', e => { e.stopPropagation(); const m = $('#walkMenu'); m.hidden = !m.hidden; });
+  const wdel = (w, h) => $(w).addEventListener('click', () => { $('#walkMenu').hidden = true; $(h).click(); });
+  wdel('#btnWFolder', '#btnFolder'); wdel('#btnWFiles', '#btnFiles'); wdel('#btnWLink', '#btnLink');
+  wdel('#btnWDemo', '#btnDemo'); wdel('#btnWAi', '#btnAi'); wdel('#btnWInfo', '#btnInfo'); wdel('#btnWCriteria', '#btnCriteria');
   const syncFullBtn = () => {
     const b = $('#btnFull');
     if (b) b.textContent = document.fullscreenElement ? '🗗 전체화면 해제' : '⛶ 전체화면';
@@ -1468,11 +1491,14 @@ function renderWalkthrough(g, items){
   animate(last);
 
   const onResize = () => {
-    const w = g.clientWidth, h = Math.max(480, Math.min(760, Math.round(w * 0.5)));
+    const w = g.clientWidth;
+    const h = document.fullscreenElement ? window.innerHeight
+      : Math.max(480, Math.min(1100, Math.round(window.innerHeight - 170)));
     camera.aspect = w / h; camera.updateProjectionMatrix();
     renderer.setSize(w, h);
   };
   window.addEventListener('resize', onResize);
+  document.addEventListener('fullscreenchange', onResize);
 
   walkCleanup = () => {
     alive = false; cancelAnimationFrame(raf);
@@ -1483,6 +1509,7 @@ function renderWalkthrough(g, items){
     window.removeEventListener('keydown', kDown);
     window.removeEventListener('keyup', kUp);
     window.removeEventListener('resize', onResize);
+    document.removeEventListener('fullscreenchange', onResize);
     el.removeEventListener('click', onClick);
     if (walkJoyCleanup){ window.removeEventListener('touchend', walkJoyCleanup); window.removeEventListener('touchcancel', walkJoyCleanup); walkJoyCleanup = null; }
     if (joyEl && joyEl.parentNode) joyEl.parentNode.removeChild(joyEl);
