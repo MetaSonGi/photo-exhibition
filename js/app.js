@@ -8,7 +8,7 @@ const state = {
   config: { title:'사진전시관', subtitle:'다섯 개의 방에 거는 사진들', accent:'#c9a227', accent2:'#e8c874', artist:'MetaSongi', year:'2026' },
   criteria: { min: 4, max: 100 },
   items: [],
-  style: 'whitecube',
+  style: 'walkthrough',
   walkTheme: 'whitecube',
   seq: 0,
 };
@@ -490,133 +490,183 @@ function renderWalkthrough(g, items){
       <button class="btn" id="btnWalkHelp">❔ 조작법</button>
     </div>
     <div class="walk-ui walk-themes"><span class="walk-themes-label">🎨 공간 디자인</span>${themeBtns}</div>
-    <div class="walk-hint">드래그: 시점 회전 · W A S D: 이동 · 작품 클릭: 크게 보기</div>`;
-  const W = g.clientWidth, H = 620;
+    <div class="walk-hint">드래그: 시점 회전 · W A S D: 이동 · 작품 클릭: 크게 보기</div>
+    <div class="walk-loading" id="walkLoading">
+      <div class="walk-loading-t">🖼️ 전시장을 준비하는 중…</div>
+      <div class="walk-loading-bar"><div id="walkBar"></div></div>
+    </div>
+    <div class="walk-lookcard" id="walkLook" hidden></div>`;
+  const W = g.clientWidth, H = Math.max(480, Math.min(760, Math.round(W * 0.5)));
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(theme.bg);
-  scene.fog = new THREE.Fog(theme.fog[0], theme.fog[1], theme.fog[2]);
-  const camera = new THREE.PerspectiveCamera(68, W/H, 0.1, 100);
+  scene.fog = new THREE.Fog(theme.bg, 25, 150);
+  const camera = new THREE.PerspectiveCamera(68, W/H, 0.1, 400);
   const EYE = 1.65;
-  camera.position.set(0, EYE, 5.5);
   const renderer = new THREE.WebGLRenderer({ antialias:true });
   renderer.setSize(W, H);
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-  renderer.shadowMap.enabled = true;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
   g.insertBefore(renderer.domElement, g.firstChild);
 
-  scene.add(new THREE.HemisphereLight(theme.hemi[0], theme.hemi[1], 0.85));
-  const ROOM = { w: 26, d: 18, h: 4.4 };
-  const hw = ROOM.w/2, hd = ROOM.d/2;
+  /* ---------- 전시장 레이아웃 (서펜타인 파티션) ---------- */
+  const N = items.length;
+  const SEGS_PER_ROW = 4, SEG_LEN = 15, SEG_T = 0.4, SEG_H = 4.2;
+  const ROW_GAP = 9, SPACING = 3.0, ART_Y = 1.75, FW = 1.9, FH = 1.2;
+  const perSide = Math.max(2, Math.floor(SEG_LEN / SPACING));
+  const rows = Math.max(1, Math.ceil(N / (perSide * 2 * SEGS_PER_ROW)));
+  const rowW = SEGS_PER_ROW * SEG_LEN + (SEGS_PER_ROW - 1) * 6;
+  const hallW = rowW + 24, hallD = (rows - 1) * ROW_GAP + 30;
+  const hw = hallW / 2, hd = hallD / 2, HH = 5.6;
+  camera.position.set(0, EYE, hd - 4);
+
+  scene.add(new THREE.HemisphereLight(theme.hemi[0], theme.hemi[1], 0.95));
+  // 천장 조명 스트립 + 스포트라이트 (작품 조명)
+  const stripMat = new THREE.MeshBasicMaterial({ color: theme.lamp });
+  const stripGeo = new THREE.BoxGeometry(rowW, 0.07, 0.6);
+  for (let r = 0; r < rows; r++){
+    const z = -(rows - 1) * ROW_GAP / 2 + r * ROW_GAP;
+    const strip = new THREE.Mesh(stripGeo, stripMat);
+    strip.position.set(0, HH - 0.06, z); scene.add(strip);
+    for (const sx of [-rowW / 4, rowW / 4]){
+      const sp = new THREE.SpotLight(theme.lamp, theme.lampI * 1.6, 34, 0.62, 0.45, 1.1);
+      sp.position.set(sx, HH - 0.3, z);
+      sp.target.position.set(sx, 1.1, z);
+      scene.add(sp); scene.add(sp.target);
+    }
+  }
 
   const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(ROOM.w, ROOM.d),
-    new THREE.MeshStandardMaterial({ color: theme.floor, roughness: .9 }));
-  floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; scene.add(floor);
+    new THREE.PlaneGeometry(hallW, hallD),
+    new THREE.MeshStandardMaterial({ color: theme.floor, roughness: .3, metalness: .12 }));
+  floor.rotation.x = -Math.PI/2; scene.add(floor);
   const ceil = new THREE.Mesh(
-    new THREE.PlaneGeometry(ROOM.w, ROOM.d),
+    new THREE.PlaneGeometry(hallW, hallD),
     new THREE.MeshStandardMaterial({ color: theme.ceil, roughness: 1 }));
-  ceil.rotation.x = Math.PI/2; ceil.position.y = ROOM.h; scene.add(ceil);
-
+  ceil.rotation.x = Math.PI/2; ceil.position.y = HH; scene.add(ceil);
   const wallMat = new THREE.MeshStandardMaterial({ color: theme.wall, roughness: .95 });
   const mkWall = (w, h, x, y, z, ry) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), wallMat);
-    m.position.set(x, y, z); m.rotation.y = ry; m.receiveShadow = true; scene.add(m);
+    m.position.set(x, y, z); m.rotation.y = ry; scene.add(m);
   };
-  mkWall(ROOM.w, ROOM.h, 0, ROOM.h/2, -hd, 0);
-  mkWall(ROOM.w, ROOM.h, 0, ROOM.h/2,  hd, Math.PI);
-  mkWall(ROOM.d, ROOM.h, -hw, ROOM.h/2, 0, Math.PI/2);
-  mkWall(ROOM.d, ROOM.h,  hw, ROOM.h/2, 0, -Math.PI/2);
-  // 천장 조명
-  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++){
-    const pl = new THREE.PointLight(theme.lamp, theme.lampI, 26);
-    pl.position.set(i*8, ROOM.h-0.4, j*5.4); scene.add(pl);
-  }
+  mkWall(hallW, HH, 0, HH/2, -hd, 0);
+  mkWall(hallW, HH, 0, HH/2,  hd, Math.PI);
+  mkWall(hallD, HH, -hw, HH/2, 0, Math.PI/2);
+  mkWall(hallD, HH,  hw, HH/2, 0, -Math.PI/2);
 
-  // 공간 음향 시작 (클릭 진입이라 사용자 제스처 하에서 생성됨)
+  // 공간 음향
   ambienceInit();
   if (amb.on && amb.ctx) amb.ctx.resume().catch(() => {});
 
-  // 작품 배치
-  const loader = new THREE.TextureLoader();
+  /* ---------- 작품 배치 ---------- */
+  const manager = new THREE.LoadingManager();
+  const loader = new THREE.TextureLoader(manager);
+  loader.setCrossOrigin('anonymous');
+  const bar = $('#walkBar'), loadingEl = $('#walkLoading');
+  manager.onProgress = (u, loaded, total) => {
+    if (bar) bar.style.width = Math.round(loaded / Math.max(1, total) * 100) + '%';
+  };
+  manager.onLoad = () => { if (loadingEl){ loadingEl.style.opacity = '0'; setTimeout(() => loadingEl.remove(), 600); } };
+  setTimeout(() => loadingEl?.remove(), 20000); // 안전망: 20초 후 강제 제거
+
+  const thumbUrl = it => (it.source === 'drive' ? String(it.url).replace('sz=w1920', 'sz=w400') : it.url);
+  let texCount = 0;
+  const wallGeo = new THREE.BoxGeometry(SEG_LEN, SEG_H, SEG_T);
+  const frameGeo = new THREE.BoxGeometry(FW + 0.16, FH + 0.16, 0.07);
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x191919, roughness: .5, metalness: .25 });
+  const photoGeo = new THREE.PlaneGeometry(FW, FH);
+  const colliders = [];
   const photoMeshes = [];
-  const FW = 1.9, FH = 1.2, ART_Y = 1.75;
-  const walls = [
-    { len: ROOM.w, fixed: -hd+0.06, axis: 'z', dir: 1 },   // 북
-    { len: ROOM.w, fixed:  hd-0.06, axis: 'z', dir: -1 },  // 남
-    { len: ROOM.d, fixed: -hw+0.06, axis: 'x', dir: 1 },   // 서
-    { len: ROOM.d, fixed:  hw-0.06, axis: 'x', dir: -1 },  // 동
-  ];
-  const list = items.slice(0, 48);
-  const perWall = Math.ceil(list.length / 4);
   const waypoints = [];
-  list.forEach((it, i) => {
-    const wI = Math.floor(i / perWall), k = i % perWall;
-    const wall = walls[wI];
-    const nThis = Math.min(perWall, list.length - wI*perWall);
-    const t = nThis === 1 ? 0 : (k/(nThis-1) - 0.5);
-    const along = t * (wall.len - 5);
-    const pos = new THREE.Vector3();
-    let ry = 0;
-    if (wall.axis === 'z'){ pos.set(along, ART_Y, wall.fixed); ry = wall.dir > 0 ? 0 : Math.PI; }
-    else { pos.set(wall.fixed, ART_Y, along); ry = wall.dir > 0 ? Math.PI/2 : -Math.PI/2; }
 
-    const grp = new THREE.Group(); grp.position.copy(pos); grp.rotation.y = ry;
-    const frame = new THREE.Mesh(
-      new THREE.BoxGeometry(FW+0.16, FH+0.16, 0.07),
-      new THREE.MeshStandardMaterial({ color: 0x161616, roughness: .6 }));
-    frame.castShadow = true; grp.add(frame);
-    const mat = new THREE.MeshBasicMaterial({ color: 0x222222 });
-    const photo = new THREE.Mesh(new THREE.PlaneGeometry(FW, FH), mat);
-    photo.position.z = 0.045; photo.userData.itemId = it.id;
-    grp.add(photo); photoMeshes.push(photo);
-    if (it.type === 'image'){
-      loader.load(it.url, tex => {
-        const ia = tex.image.width / tex.image.height, fa = FW/FH;
-        if (ia > fa){ tex.wrapS = THREE.RepeatWrapping; tex.repeat.x = fa/ia; tex.offset.x = (1-tex.repeat.x)/2; }
-        else { tex.wrapT = THREE.RepeatWrapping; tex.repeat.y = ia/fa; tex.offset.y = (1-tex.repeat.y)/2; }
-        mat.map = tex; mat.color.set(0xffffff); mat.needsUpdate = true;
-      });
-    } else {
-      const v = document.createElement('video');
-      v.src = it.url; v.muted = true; v.loop = true; v.playsInline = true;
-      v.play().catch(()=>{});
-      const vt = new THREE.VideoTexture(v); vt.minFilter = THREE.LinearFilter;
-      mat.map = vt; mat.color.set(0xffffff);
-      it._wv = v;
-    }
-    // 캡션 플레이트
-    const cv = document.createElement('canvas'); cv.width = 512; cv.height = 112;
+  const badgeTex = (() => {
+    const cv = document.createElement('canvas'); cv.width = 256; cv.height = 160;
     const cx = cv.getContext('2d');
-    cx.fillStyle = '#f5f2ea'; cx.fillRect(0,0,512,112);
-    cx.fillStyle = state.config.accent; cx.fillRect(0,0,512,10);
-    cx.fillStyle = '#1c1a16'; cx.font = '600 40px "Noto Serif KR", serif';
-    cx.fillText((it.title||'무제').slice(0,14), 28, 62);
-    cx.fillStyle = '#8a8478'; cx.font = '26px sans-serif';
-    cx.fillText(`${state.config.artist} · ${state.config.year}`, 28, 94);
-    const plate = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.62, 0.135),
-      new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv) }));
-    plate.position.set(0, -(FH/2+0.24), 0.045); grp.add(plate);
-    scene.add(grp);
+    cx.fillStyle = '#101014'; cx.fillRect(0, 0, 256, 160);
+    cx.fillStyle = '#c9a227'; cx.beginPath();
+    cx.moveTo(108, 58); cx.lineTo(108, 102); cx.lineTo(148, 80); cx.closePath(); cx.fill();
+    cx.fillStyle = '#8a8478'; cx.font = '20px sans-serif'; cx.textAlign = 'center';
+    cx.fillText('VIDEO', 128, 132);
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t;
+  })();
 
-    const normal = new THREE.Vector3(0,0,1).applyEuler(grp.rotation);
-    waypoints.push({
-      cam: pos.clone().add(normal.clone().multiplyScalar(3.1)).setY(EYE),
-      look: pos.clone(),
-    });
-  });
+  let idx = 0;
+  outer:
+  for (let r = 0; r < rows; r++){
+    const z = -(rows - 1) * ROW_GAP / 2 + r * ROW_GAP;
+    for (let s = 0; s < SEGS_PER_ROW; s++){
+      const cx = -rowW / 2 + SEG_LEN / 2 + s * (SEG_LEN + 6);
+      const wall = new THREE.Mesh(wallGeo, wallMat);
+      wall.position.set(cx, SEG_H / 2, z); scene.add(wall);
+      colliders.push({ minX: cx - SEG_LEN/2, maxX: cx + SEG_LEN/2, minZ: z - SEG_T/2, maxZ: z + SEG_T/2 });
+      for (const side of [1, -1]){
+        for (let k = 0; k < perSide; k++){
+          if (idx >= N) break outer;
+          const it = items[idx];
+          const x = cx - (perSide - 1) * SPACING / 2 + k * SPACING;
+          const grp = new THREE.Group();
+          grp.position.set(x, ART_Y, z + side * (SEG_T/2 + 0.06));
+          grp.rotation.y = side > 0 ? 0 : Math.PI;
+          const frame = new THREE.Mesh(frameGeo, frameMat); grp.add(frame);
+          const mat = new THREE.MeshBasicMaterial({ color: 0x2a2a2e });
+          const photo = new THREE.Mesh(photoGeo, mat);
+          photo.position.z = 0.045; photo.userData.itemId = it.id; photo.userData.index = idx;
+          grp.add(photo); photoMeshes.push(photo);
+          if (it.type === 'image'){
+            texCount++;
+            loader.load(thumbUrl(it),
+              tex => {
+                tex.colorSpace = THREE.SRGBColorSpace;
+                const ia = tex.image.width / tex.image.height, fa = FW / FH;
+                if (ia > fa){ tex.wrapS = THREE.RepeatWrapping; tex.repeat.x = fa / ia; tex.offset.x = (1 - tex.repeat.x) / 2; }
+                else { tex.wrapT = THREE.RepeatWrapping; tex.repeat.y = ia / fa; tex.offset.y = (1 - tex.repeat.y) / 2; }
+                mat.map = tex; mat.color.set(0xffffff); mat.needsUpdate = true;
+              },
+              undefined,
+              () => { mat.color.set(0x3a3a40); });
+          } else {
+            mat.map = badgeTex; mat.color.set(0xffffff);
+          }
+          // 캡션 플레이트
+          const cv = document.createElement('canvas'); cv.width = 512; cv.height = 112;
+          const c2 = cv.getContext('2d');
+          c2.fillStyle = '#f5f2ea'; c2.fillRect(0, 0, 512, 112);
+          c2.fillStyle = state.config.accent; c2.fillRect(0, 0, 512, 10);
+          c2.fillStyle = '#1c1a16'; c2.font = '600 40px "Noto Serif KR", serif';
+          c2.fillText((it.title || '무제').slice(0, 14), 28, 62);
+          c2.fillStyle = '#8a8478'; c2.font = '26px sans-serif';
+          c2.fillText(`${state.config.artist} · ${state.config.year}`, 28, 94);
+          const plateTex = new THREE.CanvasTexture(cv); plateTex.colorSpace = THREE.SRGBColorSpace;
+          const plate = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.62, 0.135),
+            new THREE.MeshBasicMaterial({ map: plateTex }));
+          plate.position.set(0, -(FH/2 + 0.24), 0.045); grp.add(plate);
+          scene.add(grp);
+          const normal = new THREE.Vector3(0, 0, 1).applyEuler(grp.rotation);
+          waypoints.push({
+            cam: grp.position.clone().add(normal.clone().multiplyScalar(3.1)).setY(EYE),
+            look: grp.position.clone(),
+          });
+          idx++;
+        }
+      }
+    }
+  }
+  if (texCount === 0 && loadingEl) loadingEl.remove();
 
-  // 조작: 드래그 시점 + WASD 이동
-  let yaw = Math.PI, pitch = 0; // 북쪽 벽을 바라보게
+  /* ---------- 조작: 드래그 시점 + WASD 이동 + 충돌 ---------- */
+  let walkJoyCleanup = null;
+  let yaw = 0, pitch = 0;
   let dragging = false, lx = 0, ly = 0, moved = 0;
   const keys = {};
   const el = renderer.domElement;
   const pDown = e => { dragging = true; lx = e.clientX; ly = e.clientY; moved = 0; stopTour(); };
   const pMove = e => {
     if (!dragging) return;
-    const dx = e.clientX-lx, dy = e.clientY-ly; lx = e.clientX; ly = e.clientY;
-    moved += Math.abs(dx)+Math.abs(dy);
-    yaw -= dx*0.004; pitch = Math.max(-1.1, Math.min(1.1, pitch - dy*0.004));
+    const dx = e.clientX - lx, dy = e.clientY - ly; lx = e.clientX; ly = e.clientY;
+    moved += Math.abs(dx) + Math.abs(dy);
+    yaw -= dx * 0.004; pitch = Math.max(-1.1, Math.min(1.1, pitch - dy * 0.004));
   };
   const pUp = () => dragging = false;
   el.addEventListener('pointerdown', pDown);
@@ -628,12 +678,59 @@ function renderWalkthrough(g, items){
   window.addEventListener('keydown', kDown);
   window.addEventListener('keyup', kUp);
 
+  // 모바일 가상 조이스틱
+  let joyVec = null, joyEl = null;
+  if ('ontouchstart' in window){
+    joyEl = document.createElement('div');
+    joyEl.className = 'walk-joy'; joyEl.innerHTML = '<div class="walk-joy-knob"></div>';
+    g.appendChild(joyEl);
+    const knob = joyEl.firstChild;
+    let joyId = null, jcx = 0, jcy = 0;
+    joyEl.addEventListener('touchstart', e => {
+      const t = e.changedTouches[0]; joyId = t.identifier;
+      const r = joyEl.getBoundingClientRect(); jcx = r.left + r.width/2; jcy = r.top + r.height/2;
+      stopTour(); e.preventDefault();
+    }, { passive: false });
+    window.addEventListener('touchmove', e => {
+      for (const t of e.changedTouches) if (t.identifier === joyId){
+        let dx = (t.clientX - jcx) / 45, dy = (t.clientY - jcy) / 45;
+        const l = Math.hypot(dx, dy); if (l > 1){ dx /= l; dy /= l; }
+        joyVec = { x: dx, y: dy };
+        knob.style.transform = `translate(${dx * 30}px,${dy * 30}px)`;
+      }
+    }, { passive: true });
+    const joyEnd = e => {
+      for (const t of e.changedTouches) if (t.identifier === joyId){
+        joyId = null; joyVec = null; knob.style.transform = '';
+      }
+    };
+    window.addEventListener('touchend', joyEnd);
+    window.addEventListener('touchcancel', joyEnd);
+    walkJoyCleanup = joyEnd;
+  }
+
+  const collide = p => {
+    const R = 0.55;
+    for (const b of colliders){
+      const nx = Math.max(b.minX, Math.min(p.x, b.maxX));
+      const nz = Math.max(b.minZ, Math.min(p.z, b.maxZ));
+      const dx = p.x - nx, dz = p.z - nz, d2 = dx*dx + dz*dz;
+      if (d2 < R * R && d2 > 1e-6){
+        const d = Math.sqrt(d2);
+        p.x = nx + dx / d * R; p.z = nz + dz / d * R;
+      }
+    }
+    p.x = Math.max(-hw + 1, Math.min(hw - 1, p.x));
+    p.z = Math.max(-hd + 1, Math.min(hd - 1, p.z));
+  };
+
   const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
+  const lookCard = $('#walkLook');
   const onClick = e => {
     if (moved > 10) return;
     const r = el.getBoundingClientRect();
-    ptr.x = ((e.clientX-r.left)/r.width)*2-1;
-    ptr.y = -((e.clientY-r.top)/r.height)*2+1;
+    ptr.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+    ptr.y = -((e.clientY - r.top) / r.height) * 2 + 1;
     ray.setFromCamera(ptr, camera);
     const hit = ray.intersectObjects(photoMeshes)[0];
     if (hit) openLightbox(hit.object.userData.itemId);
@@ -642,7 +739,7 @@ function renderWalkthrough(g, items){
 
   // 도슨트 투어
   const tour = { on:false, i:0, phase:'move', t:0, from:new THREE.Vector3(), fromLook:new THREE.Vector3() };
-  const lookTarget = new THREE.Vector3(0, EYE, -hd);
+  const lookTarget = new THREE.Vector3(0, EYE, hd - 8);
   function stopTour(){ tour.on = false; const b = $('#btnTour'); if (b) b.textContent = '🎧 도슨트 투어'; }
   $('#btnTour').addEventListener('click', () => {
     if (!waypoints.length) return;
@@ -655,7 +752,7 @@ function renderWalkthrough(g, items){
     }
   });
   $('#btnWalkHelp').addEventListener('click', () =>
-    toast('드래그: 둘러보기 · W A S D / 방향키: 이동 · 작품 클릭: 크게 보기'));
+    toast('드래그: 둘러보기 · W A S D / 방향키: 이동 · 조이스틱(모바일): 이동 · 작품 클릭: 크게 보기'));
   $('#btnSound').addEventListener('click', () => {
     ambienceSet(!amb.on);
     $('#btnSound').textContent = amb.on ? '🔊 공간음향' : '🔇 음향꺼짐';
@@ -668,43 +765,55 @@ function renderWalkthrough(g, items){
     toast(`${WALK_THEMES[state.walkTheme].label} 공간으로 바꿨어요 — 이제 기본 공간으로 저장됩니다`);
   }));
 
-  const fwd = new THREE.Vector3(), rgt = new THREE.Vector3();
-  let raf = 0, alive = true, last = performance.now();
+  const fwd = new THREE.Vector3(), rgt = new THREE.Vector3(), cdir = new THREE.Vector3();
+  let raf = 0, alive = true, last = performance.now(), frame = 0;
   const animate = now => {
     if (!alive) return;
-    const dt = Math.min(0.05, (now-last)/1000); last = now;
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
     if (tour.on && waypoints.length){
       const wp = waypoints[tour.i];
       tour.t += dt;
       if (tour.phase === 'move'){
-        const k = Math.min(1, tour.t/2.4), e = k*k*(3-2*k);
-        camera.position.lerpVectors(tour.from, wp.cam, e);
-        lookTarget.lerpVectors(tour.fromLook, wp.look, e);
+        const k = Math.min(1, tour.t / 2.6), e2 = k * k * (3 - 2 * k);
+        camera.position.lerpVectors(tour.from, wp.cam, e2);
+        lookTarget.lerpVectors(tour.fromLook, wp.look, e2);
         if (k >= 1){ tour.phase = 'hold'; tour.t = 0; }
-      } else {
-        if (tour.t > 2.6){
-          tour.i = (tour.i+1) % waypoints.length;
-          tour.phase = 'move'; tour.t = 0;
-          tour.from.copy(camera.position); tour.fromLook.copy(lookTarget);
-        }
+      } else if (tour.t > 2.8){
+        tour.i = (tour.i + 1) % waypoints.length;
+        tour.phase = 'move'; tour.t = 0;
+        tour.from.copy(camera.position); tour.fromLook.copy(lookTarget);
       }
       const d = new THREE.Vector3().subVectors(lookTarget, camera.position);
       yaw = Math.atan2(-d.x, -d.z); pitch = Math.atan2(d.y, Math.hypot(d.x, d.z));
     } else {
-      const sp = 3.4 * dt;
+      const sp = 3.6 * dt;
       fwd.set(-Math.sin(yaw), 0, -Math.cos(yaw));
       rgt.set(-fwd.z, 0, fwd.x);
       if (keys['w'] || keys['arrowup']) camera.position.addScaledVector(fwd, sp);
       if (keys['s'] || keys['arrowdown']) camera.position.addScaledVector(fwd, -sp);
       if (keys['a'] || keys['arrowleft']) camera.position.addScaledVector(rgt, -sp);
       if (keys['d'] || keys['arrowright']) camera.position.addScaledVector(rgt, sp);
-      camera.position.x = Math.max(-hw+0.8, Math.min(hw-0.8, camera.position.x));
-      camera.position.z = Math.max(-hd+0.8, Math.min(hd-0.8, camera.position.z));
+      if (joyVec){
+        camera.position.addScaledVector(fwd, -joyVec.y * sp).addScaledVector(rgt, joyVec.x * sp);
+      }
+      collide(camera.position);
       camera.position.y = EYE;
       lookTarget.copy(camera.position).add(new THREE.Vector3(
-        -Math.sin(yaw)*Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw)*Math.cos(pitch)));
+        -Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)));
     }
     camera.lookAt(lookTarget);
+    // 바라보는 작품 정보 카드
+    if (lookCard && !tour.on && (++frame % 12 === 0)){
+      camera.getWorldDirection(cdir);
+      ray.set(camera.position, cdir);
+      ray.far = 11;
+      const hit = ray.intersectObjects(photoMeshes)[0];
+      if (hit){
+        const it = items[hit.object.userData.index];
+        lookCard.hidden = false;
+        lookCard.innerHTML = `<b>No.${hit.object.userData.index + 1} ${esc(it.title)}</b><span>${esc(state.config.artist)} · ${esc(state.config.year)}${it.type === 'video' ? ' · 영상' : ''}</span>`;
+      } else lookCard.hidden = true;
+    } else if (lookCard && tour.on) lookCard.hidden = true;
     ambienceUpdate(camera, yaw, pitch);
     renderer.render(scene, camera);
     raf = requestAnimationFrame(animate);
@@ -712,15 +821,15 @@ function renderWalkthrough(g, items){
   animate(last);
 
   const onResize = () => {
-    const w = g.clientWidth, h = 620;
-    camera.aspect = w/h; camera.updateProjectionMatrix();
+    const w = g.clientWidth, h = Math.max(480, Math.min(760, Math.round(w * 0.5)));
+    camera.aspect = w / h; camera.updateProjectionMatrix();
     renderer.setSize(w, h);
   };
   window.addEventListener('resize', onResize);
 
   walkCleanup = () => {
     alive = false; cancelAnimationFrame(raf);
-    if (amb.ctx) amb.ctx.suspend().catch(() => {}); // 전시관 나가면 음향 정지
+    if (amb.ctx) amb.ctx.suspend().catch(() => {});
     el.removeEventListener('pointerdown', pDown);
     window.removeEventListener('pointermove', pMove);
     window.removeEventListener('pointerup', pUp);
@@ -728,15 +837,18 @@ function renderWalkthrough(g, items){
     window.removeEventListener('keyup', kUp);
     window.removeEventListener('resize', onResize);
     el.removeEventListener('click', onClick);
-    list.forEach(it => { if (it._wv){ it._wv.pause(); it._wv.src=''; delete it._wv; } });
+    if (walkJoyCleanup){ window.removeEventListener('touchend', walkJoyCleanup); window.removeEventListener('touchcancel', walkJoyCleanup); walkJoyCleanup = null; }
+    if (joyEl && joyEl.parentNode) joyEl.parentNode.removeChild(joyEl);
     scene.traverse(o => {
-      if (o.geometry) o.geometry.dispose();
-      if (o.material){ [].concat(o.material).forEach(m => { m.map?.dispose?.(); m.dispose(); }); }
+      if (o.geometry && ![wallGeo, frameGeo, photoGeo, stripGeo].includes(o.geometry)) o.geometry.dispose();
+      if (o.material){ [].concat(o.material).forEach(m => { m.map?.dispose?.(); if (![frameMat, wallMat, stripMat].includes(m)) m.dispose(); }); }
     });
+    [wallGeo, frameGeo, photoGeo, stripGeo].forEach(x => x.dispose());
     renderer.dispose();
     if (el.parentNode) el.parentNode.removeChild(el);
   };
 }
+
 
 /* ---------- 라이트박스 ---------- */
 const lb = { list: [], idx: 0 };
@@ -1049,7 +1161,7 @@ function init(){
     n.addEventListener('click', e => e.stopPropagation());
     n.addEventListener('blur', () => {
       const it = state.items.find(x => x.id === n.dataset.id);
-      if (it) it[id === 'lbTitle' ? 'title' : 'desc'] = n.textContent.trim();
+      if (it){ it[id === 'lbTitle' ? 'title' : 'desc'] = n.textContent.trim(); saveItems(); }
     });
     n.addEventListener('keydown', e => { if (e.key === 'Enter' && id === 'lbTitle'){ e.preventDefault(); n.blur(); } });
   });
