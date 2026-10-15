@@ -27,6 +27,15 @@ button{font-family:inherit;cursor:pointer}
 .brand h1:focus{background:rgba(201,162,39,.12)}
 .brand p{font-size:14px;color:var(--muted);margin-top:10px;letter-spacing:2px}
 .top-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+body.exhibiting .topbar,body.exhibiting .styleswitch,body.exhibiting .criteria{display:none}
+.walk-menu{
+  position:absolute;top:56px;left:14px;z-index:6;display:flex;flex-direction:column;gap:6px;
+  background:rgba(10,10,12,.88);border:1px solid #3a3a42;border-radius:12px;padding:10px;min-width:172px;
+  box-shadow:0 12px 32px rgba(0,0,0,.5);backdrop-filter:blur(8px);
+}
+.walk-menu[hidden]{display:none}
+.walk-menu .btn{background:transparent;color:#f4f1ea;border-color:transparent;text-align:left}
+.walk-menu .btn:hover{background:rgba(255,255,255,.08)}
 .menu-wrap{position:relative}
 .menu-pop{
   position:absolute;right:0;top:calc(100% + 8px);z-index:60;
