@@ -955,9 +955,10 @@ function renderWalkthrough(g, items){
   const floorMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .3, metalness: .12, map: tiledTex(floorCv, 12, 12) });
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(hallW, hallD), floorMat);
   floor.rotation.x = -Math.PI/2; scene.add(floor);
+  const ceilCv = texCanvas(theme.ceilTex || 'plaster', hexCss(theme.ceil));
   const ceil = new THREE.Mesh(
     new THREE.PlaneGeometry(hallW, hallD),
-    new THREE.MeshStandardMaterial({ color: theme.ceil, roughness: 1 }));
+    new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, map: tiledTex(ceilCv, 18, 18) }));
   ceil.rotation.x = Math.PI/2; ceil.position.y = HH; scene.add(ceil);
   const wallMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .95, map: tiledTex(wallCv, 5, 1.4) });
   const wallMatOuter = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .95, map: tiledTex(wallCv, 30, 3) });
