@@ -942,9 +942,10 @@ function renderWalkthrough(g, items){
     const perSeg = Math.max(2, Math.floor(SEG_LEN / SPACING)) * 2;
     const NSEG = Math.max(6, Math.min(12, Math.ceil(N / perSeg) + 2));
     const R0 = Math.max(14, NSEG * (SEG_LEN + 2) / (2 * Math.PI));
-    let need = N, ring = 0;
-    while (need > 0 && ring < 6){
-      const R = R0 - ring * RING_GAP;
+    let need = N, ring = 0, maxR = R0;
+    while (need > 0 && ring < 8){
+      const R = R0 + ring * RING_GAP;
+      maxR = R;
       for (let s = 0; s < NSEG && need > 0; s++){
         const a = (s / NSEG) * Math.PI * 2 + ring * 0.26;
         const ry = -a - Math.PI / 2;
@@ -956,7 +957,7 @@ function renderWalkthrough(g, items){
       }
       ring++;
     }
-    hallW = hallD = (R0 + 18) * 2;
+    hallW = hallD = (maxR + 18) * 2;
     firstRowZ = 0;
   } else if (layout === 'maze'){
     // 미로: 엇갈린 지그재그 파티션
