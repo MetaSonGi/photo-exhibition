@@ -103,6 +103,29 @@ const TEX_PAINT = {
     }
     speckle(cx, S, 500, .03);
   },
+  coffer(cx, base, S){
+    cx.fillStyle = base; cx.fillRect(0,0,S,S);
+    const n = 4, s = S / n;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++){
+      const x = i*s, y = j*s, m = s*0.16;
+      cx.fillStyle = 'rgba(0,0,0,0.28)'; cx.fillRect(x+m, y+m, s-2*m, s-2*m);
+      cx.strokeStyle = 'rgba(255,255,255,0.13)'; cx.lineWidth = 3;
+      cx.strokeRect(x+m, y+m, s-2*m, s-2*m);
+      cx.strokeStyle = 'rgba(0,0,0,0.35)'; cx.lineWidth = 5;
+      cx.strokeRect(x+2, y+2, s-4, s-4);
+    }
+    speckle(cx, S, 700, .04);
+  },
+  beam(cx, base, S){
+    cx.fillStyle = base; cx.fillRect(0,0,S,S); speckle(cx, S, 900, .05);
+    const bw = S / 4;
+    for (let b = 0; b < 4; b++){
+      const g = cx.createLinearGradient(b*bw, 0, (b+1)*bw, 0);
+      g.addColorStop(0, 'rgba(0,0,0,0.42)'); g.addColorStop(0.3, 'rgba(255,255,255,0.07)');
+      g.addColorStop(0.7, 'rgba(0,0,0,0.10)'); g.addColorStop(1, 'rgba(0,0,0,0.42)');
+      cx.fillStyle = g; cx.fillRect(b*bw, 0, bw, S);
+    }
+  },
   metal(cx, base, S){
     cx.fillStyle = base; cx.fillRect(0,0,S,S);
     const pw = S / 4;
@@ -127,17 +150,17 @@ function tiledTex(cv, rx, ry){
   return t;
 }
 const WALK_THEMES = {
-  whitecube:  { label:'화이트큐브', bg:0x0e0e10, fog:[0x0e0e10,14,34], wall:0xece5d8, floor:0x8a6f52, ceil:0x17171a, hemi:[0xfff6e8,0x2a2a30], lamp:0xffe2b0, lampI:0.55, wallTex:'plaster', floorTex:'concrete' },
-  darkmood:   { label:'다크 무드', bg:0x060607, fog:[0x060607,11,28], wall:0x232328, floor:0x141416, ceil:0x0b0b0d, hemi:[0xa9bdf5,0x14151c], lamp:0xa9bdf5, lampI:0.7, wallTex:'concrete', floorTex:'wood' },
-  industrial: { label:'인더스트리얼', bg:0x131210, fog:[0x131210,13,32], wall:0x53524e, floor:0x3c3833, ceil:0x232220, hemi:[0xffd9a0,0x2e271c], lamp:0xffc37a, lampI:0.6, wallTex:'concrete', floorTex:'concrete' },
-  minimal:    { label:'미니멀 화이트', bg:0xcfd4d8, fog:[0xcfd4d8,16,40], wall:0xf7f4ee, floor:0xc9b795, ceil:0xe9e5db, hemi:[0xffffff,0x9a8f7c], lamp:0xfff3de, lampI:0.5, wallTex:'plaster', floorTex:'wood' },
-  sunset:     { label:'선셋', bg:0x160d08, fog:[0x160d08,12,30], wall:0x6b4a35, floor:0x2e1f16, ceil:0x100b07, hemi:[0xffb37a,0x2a1a10], lamp:0xff9a5c, lampI:0.62, wallTex:'plaster', floorTex:'wood' },
-  louvre:     { label:'루브르 클래식', bg:0x141009, fog:[0x141009,13,32], wall:0xd9c9a8, floor:0x6b4f35, ceil:0x241c12, hemi:[0xffe8c0,0x3a2a18], lamp:0xffd9a0, lampI:0.55, wallTex:'stone', floorTex:'wood' },
-  guggenheim: { label:'구겐하임', bg:0x101216, fog:[0x101216,15,38], wall:0xf0efe9, floor:0xb9bcb4, ceil:0xdfe0da, hemi:[0xf2f5ff,0x8a8f96], lamp:0xeef2ff, lampI:0.5, wallTex:'plaster', floorTex:'marble' },
-  tate:       { label:'테이트 모던', bg:0x0d0c0b, fog:[0x0d0c0b,12,30], wall:0x6e4a3a, floor:0x35322e, ceil:0x1a1917, hemi:[0xd8e2f0,0x2a2622], lamp:0xdce8ff, lampI:0.55, wallTex:'brick', floorTex:'concrete' },
-  pompidou:   { label:'퐁피두', bg:0x0a0c10, fog:[0x0a0c10,12,30], wall:0x2e3440, floor:0x1c1e24, ceil:0x14161c, hemi:[0xbcd0ff,0x1a2030], lamp:0xcfe0ff, lampI:0.6, wallTex:'metal', floorTex:'concrete' },
-  orsay:      { label:'오르세', bg:0x120e08, fog:[0x120e08,13,32], wall:0xe5d9c0, floor:0x7a5c3a, ceil:0x2a2118, hemi:[0xffe2b0,0x3a2c1c], lamp:0xffc98a, lampI:0.55, wallTex:'plaster', floorTex:'wood' },
-  hanok:      { label:'한옥 갤러리', bg:0x0f0c08, fog:[0x0f0c08,12,30], wall:0xe8dcc0, floor:0x4a382c, ceil:0x241a12, hemi:[0xffdfae,0x33241a], lamp:0xffbe78, lampI:0.58, wallTex:'hanji', floorTex:'wood' },
+  whitecube:  { label:'화이트큐브', bg:0x0e0e10, fog:[0x0e0e10,14,34], wall:0xece5d8, floor:0x8a6f52, ceil:0x17171a, hemi:[0xfff6e8,0x2a2a30], lamp:0xffe2b0, lampI:0.55, wallTex:'plaster', floorTex:'concrete', ceilTex:'plaster' },
+  darkmood:   { label:'다크 무드', bg:0x060607, fog:[0x060607,11,28], wall:0x232328, floor:0x141416, ceil:0x0b0b0d, hemi:[0xa9bdf5,0x14151c], lamp:0xa9bdf5, lampI:0.7, wallTex:'concrete', floorTex:'wood', ceilTex:'concrete' },
+  industrial: { label:'인더스트리얼', bg:0x131210, fog:[0x131210,13,32], wall:0x53524e, floor:0x3c3833, ceil:0x232220, hemi:[0xffd9a0,0x2e271c], lamp:0xffc37a, lampI:0.6, wallTex:'concrete', floorTex:'concrete', ceilTex:'metal' },
+  minimal:    { label:'미니멀 화이트', bg:0xcfd4d8, fog:[0xcfd4d8,16,40], wall:0xf7f4ee, floor:0xc9b795, ceil:0xe9e5db, hemi:[0xffffff,0x9a8f7c], lamp:0xfff3de, lampI:0.5, wallTex:'plaster', floorTex:'wood', ceilTex:'plaster' },
+  sunset:     { label:'선셋', bg:0x160d08, fog:[0x160d08,12,30], wall:0x6b4a35, floor:0x2e1f16, ceil:0x100b07, hemi:[0xffb37a,0x2a1a10], lamp:0xff9a5c, lampI:0.62, wallTex:'plaster', floorTex:'wood', ceilTex:'plaster' },
+  louvre:     { label:'루브르 클래식', bg:0x141009, fog:[0x141009,13,32], wall:0xd9c9a8, floor:0x6b4f35, ceil:0x241c12, hemi:[0xffe8c0,0x3a2a18], lamp:0xffd9a0, lampI:0.55, wallTex:'stone', floorTex:'wood', ceilTex:'coffer' },
+  guggenheim: { label:'구겐하임', bg:0x101216, fog:[0x101216,15,38], wall:0xf0efe9, floor:0xb9bcb4, ceil:0xdfe0da, hemi:[0xf2f5ff,0x8a8f96], lamp:0xeef2ff, lampI:0.5, wallTex:'plaster', floorTex:'marble', ceilTex:'plaster' },
+  tate:       { label:'테이트 모던', bg:0x0d0c0b, fog:[0x0d0c0b,12,30], wall:0x6e4a3a, floor:0x35322e, ceil:0x1a1917, hemi:[0xd8e2f0,0x2a2622], lamp:0xdce8ff, lampI:0.55, wallTex:'brick', floorTex:'concrete', ceilTex:'concrete' },
+  pompidou:   { label:'퐁피두', bg:0x0a0c10, fog:[0x0a0c10,12,30], wall:0x2e3440, floor:0x1c1e24, ceil:0x14161c, hemi:[0xbcd0ff,0x1a2030], lamp:0xcfe0ff, lampI:0.6, wallTex:'metal', floorTex:'concrete', ceilTex:'metal' },
+  orsay:      { label:'오르세', bg:0x120e08, fog:[0x120e08,13,32], wall:0xe5d9c0, floor:0x7a5c3a, ceil:0x2a2118, hemi:[0xffe2b0,0x3a2c1c], lamp:0xffc98a, lampI:0.55, wallTex:'plaster', floorTex:'wood', ceilTex:'coffer' },
+  hanok:      { label:'한옥 갤러리', bg:0x0f0c08, fog:[0x0f0c08,12,30], wall:0xe8dcc0, floor:0x4a382c, ceil:0x241a12, hemi:[0xffdfae,0x33241a], lamp:0xffbe78, lampI:0.58, wallTex:'hanji', floorTex:'wood', ceilTex:'beam' },
 };
 let walkCleanup = null;
 let carCleanup = null;
