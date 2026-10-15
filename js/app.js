@@ -126,6 +126,20 @@ const TEX_PAINT = {
       cx.fillStyle = g; cx.fillRect(b*bw, 0, bw, S);
     }
   },
+  palace(cx, base, S){
+    cx.fillStyle = base; cx.fillRect(0,0,S,S);
+    const n = 4, s = S / n;
+    cx.strokeStyle = 'rgba(201,162,39,0.5)'; cx.lineWidth = 4;
+    for (let i = 0; i <= n; i++){
+      cx.beginPath(); cx.moveTo(i*s, 0); cx.lineTo(i*s, S); cx.stroke();
+      cx.beginPath(); cx.moveTo(0, i*s); cx.lineTo(S, i*s); cx.stroke();
+    }
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++){
+      cx.fillStyle = 'rgba(201,162,39,0.20)';
+      cx.beginPath(); cx.arc(i*s + s/2, j*s + s/2, s*0.12, 0, 7); cx.fill();
+    }
+    speckle(cx, S, 500, .04);
+  },
   metal(cx, base, S){
     cx.fillStyle = base; cx.fillRect(0,0,S,S);
     const pw = S / 4;
@@ -162,10 +176,10 @@ const WALK_THEMES = {
   orsay:      { label:'오르세', bg:0x120e08, fog:[0x120e08,13,32], wall:0xe5d9c0, floor:0x7a5c3a, ceil:0x2a2118, hemi:[0xffe2b0,0x3a2c1c], lamp:0xffc98a, lampI:0.55, wallTex:'plaster', floorTex:'wood', ceilTex:'coffer', sound:'wave' },
   hanok:      { label:'한옥 갤러리', bg:0x0f0c08, fog:[0x0f0c08,12,30], wall:0xe8dcc0, floor:0x4a382c, ceil:0x241a12, hemi:[0xffdfae,0x33241a], lamp:0xffbe78, lampI:0.58, wallTex:'hanji', floorTex:'wood', ceilTex:'beam', sound:'rain' },
   gothic:     { label:'고딕 성당', bg:0x0a0a0c, fog:[0x0a0a0c,12,30], wall:0x4a4540, floor:0x2e2c28, ceil:0x141316, hemi:[0xcfd6e6,0x1a1a20], lamp:0xd8e2f5, lampI:0.45, wallTex:'stone', floorTex:'concrete', ceilTex:'stone', sound:'rain' },
-  baroque:    { label:'바로크 궁전', bg:0x120b08, fog:[0x120b08,12,30], wall:0x6e2a24, floor:0x3a2c1e, ceil:0x1e120c, hemi:[0xffd9a8,0x2a1a10], lamp:0xffc98a, lampI:0.6, wallTex:'plaster', floorTex:'wood', ceilTex:'coffer', sound:'gallery' },
+  baroque:    { label:'바로크 궁전', bg:0x120b08, fog:[0x120b08,12,30], wall:0x6e2a24, floor:0x3a2c1e, ceil:0x1e120c, hemi:[0xffd9a8,0x2a1a10], lamp:0xffc98a, lampI:0.6, wallTex:'plaster', floorTex:'wood', ceilTex:'coffer', sound:'gallery', arch:{ pillars:0xd9c9a8, pillarTop:0xc9a227, trim:0xc9a227 } },
   mediterranean:{ label:'지중해', bg:0xbfd4de, fog:[0xbfd4de,16,40], wall:0xf2ede2, floor:0xd9c9a8, ceil:0xe8e2d4, hemi:[0xffffff,0x8a9aa8], lamp:0xfff4e0, lampI:0.45, wallTex:'plaster', floorTex:'marble', ceilTex:'plaster', sound:'wave' },
   zen:        { label:'젠 정원', bg:0x0e0f0c, fog:[0x0e0f0c,13,32], wall:0xe6dcc4, floor:0x9a7c58, ceil:0x201a12, hemi:[0xfff2d8,0x2a241a], lamp:0xffe4b0, lampI:0.5, wallTex:'hanji', floorTex:'wood', ceilTex:'beam', sound:'wind' },
-  chinese:    { label:'자금성', bg:0x100806, fog:[0x100806,12,30], wall:0x8e2f26, floor:0x4a3226, ceil:0x1c100a, hemi:[0xffd9a0,0x2a1a10], lamp:0xffbe78, lampI:0.55, wallTex:'plaster', floorTex:'wood', ceilTex:'beam', sound:'wind' },
+  chinese:    { label:'자금성', bg:0x100806, fog:[0x100806,12,30], wall:0x8e2f26, floor:0xcfc8b8, ceil:0x241408, hemi:[0xffd9a0,0x2a1a10], lamp:0xffc98a, lampI:0.6, wallTex:'plaster', floorTex:'marble', ceilTex:'palace', sound:'wind', arch:{ pillars:0x9e2f24, pillarTop:0xc9a227, trim:0xc9a227 } },
   nordic:     { label:'북유럽', bg:0xd8dee2, fog:[0xd8dee2,16,40], wall:0xf4f2ec, floor:0xc9a878, ceil:0xece8de, hemi:[0xffffff,0x9aa0a8], lamp:0xfff6e8, lampI:0.4, wallTex:'plaster', floorTex:'wood', ceilTex:'plaster', sound:'gallery' },
 };
 let walkCleanup = null;
@@ -262,6 +276,16 @@ function saveSpace(){
 }
 
 const LAYOUTS = { serpentine:'서펜타인 홀', atrium:'아트리움', rotunda:'로툰다', maze:'미로' };
+
+/* ---------- 상단 ☰ 메뉴 ---------- */
+function bindTopMenu(){
+  const btn = document.getElementById('btnMenu'), pop = document.getElementById('menuPop');
+  if (!btn || !pop || btn.dataset.bound) return;
+  btn.dataset.bound = '1';
+  btn.addEventListener('click', e => { e.stopPropagation(); pop.hidden = !pop.hidden; });
+  document.addEventListener('click', e => { if (!pop.hidden && !e.target.closest('.menu-wrap')) pop.hidden = true; });
+  pop.addEventListener('click', () => { pop.hidden = true; });
+}
 
 /* ---------- 3D 공간 설정 ---------- */
 function openSpaceModal(){
@@ -896,7 +920,7 @@ function renderWalkthrough(g, items){
       <div class="walk-loading-bar"><div id="walkBar"></div></div>
     </div>
     <div class="walk-lookcard" id="walkLook" hidden></div>`;
-  const W = g.clientWidth, H = Math.max(480, Math.min(1020, Math.round(window.innerHeight - 250)));
+  const W = g.clientWidth, H = Math.max(480, Math.min(1100, Math.round(window.innerHeight - 170)));
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(theme.bg);
   scene.fog = new THREE.Fog(theme.bg, 25, 210);
@@ -1149,6 +1173,36 @@ function renderWalkthrough(g, items){
     }
   }
   if (texCount === 0 && loadingEl) loadingEl.remove();
+
+  /* ---------- 테마 건축 요소 (궁전 기둥·금장식) ---------- */
+  if (theme.arch){
+    const A = theme.arch;
+    if (A.pillars){
+      const pr = 0.42;
+      const colGeo = new THREE.CylinderGeometry(pr, pr * 1.08, HH, 14);
+      const colMat = new THREE.MeshStandardMaterial({ color: A.pillars, roughness: .45 });
+      const capGeo = new THREE.BoxGeometry(pr * 2.7, 0.3, pr * 2.7);
+      const capMat = new THREE.MeshStandardMaterial({ color: A.pillarTop || 0xc9a227, roughness: .3, metalness: .65 });
+      const put = (px, pz) => {
+        const col = new THREE.Mesh(colGeo, colMat); col.position.set(px, HH / 2, pz); scene.add(col);
+        const cap = new THREE.Mesh(capGeo, capMat); cap.position.set(px, HH - 0.4, pz); scene.add(cap);
+        const bs = new THREE.Mesh(capGeo, capMat); bs.position.set(px, 0.15, pz); scene.add(bs);
+        colliders.push({ cx: px, cz: pz, len: pr * 2.4, ry: 0 });
+      };
+      const mx = hw - 3, mz = hd - 3, gap = 9;
+      for (let x = -mx; x <= mx + 0.01; x += gap){ put(x, -mz); put(x, mz); }
+      for (let z = -mz + gap; z <= mz - gap + 0.01; z += gap){ put(-mx, z); put(mx, z); }
+    }
+    if (A.trim){
+      const trimMat = new THREE.MeshStandardMaterial({ color: A.trim, roughness: .3, metalness: .7 });
+      const mkTrim = (w, x, z, ry) => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.22, 0.22), trimMat);
+        m.position.set(x, HH - 0.7, z); m.rotation.y = ry; scene.add(m);
+      };
+      mkTrim(hallW - 0.3, 0, -hd + 0.2, 0); mkTrim(hallW - 0.3, 0, hd - 0.2, 0);
+      mkTrim(hallD - 0.3, -hw + 0.2, 0, Math.PI / 2); mkTrim(hallD - 0.3, hw - 0.2, 0, Math.PI / 2);
+    }
+  }
 
   // 입구 안내판 (전시 정보)
   try{
@@ -1615,6 +1669,7 @@ function setupDrop(){
 
 /* ---------- 초기화 ---------- */
 function init(){
+  bindTopMenu();
   loadConfig().then(() => {
     loadItems();
     // 전시 제목 인라인 편집

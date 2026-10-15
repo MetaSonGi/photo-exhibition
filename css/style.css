@@ -26,7 +26,17 @@ button{font-family:inherit;cursor:pointer}
 }
 .brand h1:focus{background:rgba(201,162,39,.12)}
 .brand p{font-size:14px;color:var(--muted);margin-top:10px;letter-spacing:2px}
-.top-actions{display:flex;gap:8px;flex-wrap:wrap}
+.top-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.menu-wrap{position:relative}
+.menu-pop{
+  position:absolute;right:0;top:calc(100% + 8px);z-index:60;
+  display:flex;flex-direction:column;gap:6px;min-width:170px;
+  background:rgba(20,20,24,.96);border:1px solid #3a3a42;border-radius:12px;padding:10px;
+  box-shadow:0 12px 32px rgba(0,0,0,.4);backdrop-filter:blur(8px);
+}
+.menu-pop[hidden]{display:none}
+.menu-pop .btn{background:transparent;color:#f4f1ea;border-color:transparent;text-align:left}
+.menu-pop .btn:hover{background:rgba(255,255,255,.08)}
 .btn{
   border:1px solid #d8d2c4;background:#fff;color:var(--ink);
   border-radius:8px;padding:10px 16px;font-size:14px;font-weight:600;transition:all .15s;
@@ -53,6 +63,8 @@ body.dark .styleswitch button.active{background:var(--accent);border-color:var(-
 
 /* ---------- gallery common ---------- */
 .gallery{max-width:1600px;margin:18px auto 0;padding:0 32px;min-height:300px}
+.gallery.g-walkthrough{max-width:none;margin:10px 0 0;padding:0}
+.g-walkthrough{border-radius:0;border-left:none;border-right:none}
 .gallery.fade{animation:fadein .3s ease}
 @keyframes fadein{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 

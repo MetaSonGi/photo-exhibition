@@ -20,12 +20,17 @@
   </div>
   <div class="top-actions">
     <button class="btn sm primary" id="btnFolder">📁 폴더 열기</button>
-    <button class="btn sm ghost" id="btnFiles">💻 파일 올리기</button>
-    <button class="btn sm ghost" id="btnLink">🔗 링크 가져오기</button>
-    <button class="btn sm ghost" id="btnDemo">✨ 데모 전시</button>
-    <button class="btn sm ghost" id="btnAi">🤖 AI 설명</button>
-    <button class="btn sm ghost" id="btnInfo">🖋️ 전시 정보</button>
-    <button class="btn sm ghost" id="btnCriteria" title="전시 사진 장수 기준">⚙️ 전시 기준</button>
+    <div class="menu-wrap">
+      <button class="btn sm ghost" id="btnMenu">☰ 메뉴</button>
+      <div class="menu-pop" id="menuPop" hidden>
+        <button class="btn sm ghost" id="btnFiles">💻 파일 올리기</button>
+        <button class="btn sm ghost" id="btnLink">🔗 링크 가져오기</button>
+        <button class="btn sm ghost" id="btnDemo">✨ 데모 전시</button>
+        <button class="btn sm ghost" id="btnAi">🤖 AI 설명</button>
+        <button class="btn sm ghost" id="btnInfo">🖋️ 전시 정보</button>
+        <button class="btn sm ghost" id="btnCriteria" title="전시 사진 장수 기준">⚙️ 전시 기준</button>
+      </div>
+    </div>
   </div>
 </header>
 <input type="file" id="folderInput" webkitdirectory multiple hidden>
