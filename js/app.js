@@ -5,12 +5,12 @@ const IMG_EXT = ['jpg','jpeg','png','webp','gif','bmp'];
 const VID_EXT = ['mp4','webm','mov','m4v'];
 
 const state = {
-  config: { title:'사진전시관', subtitle:'다섯 개의 방에 거는 사진들', accent:'#c9a227', accent2:'#e8c874', artist:'MetaSongi', year:'2026' },
+  config: { title:'사진전시관', subtitle:'다섯 개의 방에 거는 사진들', accent:'#c9a227', accent2:'#e8c874', artist:'MetaSongi', year:'2026', bio:'', contact:'' },
   criteria: { min: 4, max: 100 },
   items: [],
   style: 'walkthrough',
   walkTheme: 'whitecube',
-  space: { light: 1, speed: 1 },
+  space: { light: 1, speed: 1, layout: 'serpentine' },
   seq: 0,
 };
 /* 3D 전시관 공간 디자인 테마 */
@@ -18,6 +18,8 @@ const WALK_THEMES = {
   whitecube:  { label:'화이트큐브', bg:0x0e0e10, fog:[0x0e0e10,14,34], wall:0xece5d8, floor:0x8a6f52, ceil:0x17171a, hemi:[0xfff6e8,0x2a2a30], lamp:0xffe2b0, lampI:0.55 },
   darkmood:   { label:'다크 무드', bg:0x060607, fog:[0x060607,11,28], wall:0x232328, floor:0x141416, ceil:0x0b0b0d, hemi:[0xa9bdf5,0x14151c], lamp:0xa9bdf5, lampI:0.7 },
   industrial: { label:'인더스트리얼', bg:0x131210, fog:[0x131210,13,32], wall:0x53524e, floor:0x3c3833, ceil:0x232220, hemi:[0xffd9a0,0x2e271c], lamp:0xffc37a, lampI:0.6 },
+  minimal:    { label:'미니멀 화이트', bg:0xcfd4d8, fog:[0xcfd4d8,16,40], wall:0xf7f4ee, floor:0xc9b795, ceil:0xe9e5db, hemi:[0xffffff,0x9a8f7c], lamp:0xfff3de, lampI:0.5 },
+  sunset:     { label:'선셋', bg:0x160d08, fog:[0x160d08,12,30], wall:0x6b4a35, floor:0x2e1f16, ceil:0x100b07, hemi:[0xffb37a,0x2a1a10], lamp:0xff9a5c, lampI:0.62 },
 };
 let walkCleanup = null;
 let carCleanup = null;
@@ -73,6 +75,15 @@ async function loadConfig(){
   document.title = c.title;
   const savedTitle = localStorage.getItem('ex_title_' + slug(c.title));
   $('#exTitle').textContent = savedTitle || c.title;
+  try{
+    const ec = JSON.parse(localStorage.getItem('ex_config_' + slug(c.title)) || 'null');
+    if (ec){
+      if (ec.subtitle) c.subtitle = ec.subtitle;
+      if (ec.artist) c.artist = ec.artist;
+      if (typeof ec.bio === 'string') c.bio = ec.bio;
+      if (typeof ec.contact === 'string') c.contact = ec.contact;
+    }
+  }catch(e){}
   $('#exSubtitle').textContent = c.subtitle;
   try{
     const crit = JSON.parse(localStorage.getItem('ex_crit_' + slug(c.title)) || 'null');
@@ -86,18 +97,44 @@ async function loadConfig(){
     const sp = JSON.parse(localStorage.getItem('ex_space_' + slug(c.title)) || 'null');
     if (sp){ if (sp.light > 0) state.space.light = sp.light; if (sp.speed > 0) state.space.speed = sp.speed; }
     const au = JSON.parse(localStorage.getItem('ex_amb_' + slug(c.title)) || 'null');
-    if (au){ if (typeof au.on === 'boolean') amb.on = au.on; if (au.vol >= 0) amb.vol = au.vol; if (typeof au.chime === 'boolean') amb.chime = au.chime; }
+    if (au){ if (typeof au.on === 'boolean') amb.on = au.on; if (au.vol >= 0) amb.vol = au.vol; if (typeof au.chime === 'boolean') amb.chime = au.chime; if (typeof au.mode === 'string') amb.mode = au.mode; }
+  }catch(e){}
+}
+function saveExConfig(){
+  try{
+    const c = state.config;
+    localStorage.setItem('ex_config_' + slug(c.title),
+      JSON.stringify({ subtitle: c.subtitle, artist: c.artist, bio: c.bio, contact: c.contact }));
   }catch(e){}
 }
 function saveSpace(){
   try{
     localStorage.setItem('ex_space_' + slug(state.config.title), JSON.stringify(state.space));
-    localStorage.setItem('ex_amb_' + slug(state.config.title), JSON.stringify({ on: amb.on, vol: amb.vol, chime: amb.chime }));
+    localStorage.setItem('ex_amb_' + slug(state.config.title), JSON.stringify({ on: amb.on, vol: amb.vol, chime: amb.chime, mode: amb.mode }));
   }catch(e){}
 }
 
 /* ---------- 3D 공간 설정 ---------- */
 function openSpaceModal(){
+  const lay = $('#spaceLayouts');
+  lay.querySelectorAll('button').forEach(b => {
+    b.classList.toggle('primary', b.dataset.layout === (state.space.layout || 'serpentine'));
+    b.onclick = () => {
+      state.space.layout = b.dataset.layout;
+      saveSpace(); openSpaceModal(); renderGallery();
+      toast(b.dataset.layout === 'atrium' ? '아트리움 배치로 바꿨어요' : '서펜타인 홀 배치로 바꿨어요');
+    };
+  });
+  const snd = $('#spaceSounds');
+  const smodes = { gallery:'갤러리', rain:'빗소리', wind:'바람', wave:'파도' };
+  snd.querySelectorAll('button').forEach(b => {
+    b.classList.toggle('primary', b.dataset.smode === amb.mode);
+    b.onclick = () => {
+      amb.mode = b.dataset.smode;
+      ambienceBuild(); saveSpace(); syncAmbUI(); openSpaceModal();
+      toast(`공간 사운드를 '${smodes[amb.mode]}'(으)로 바꿨어요`);
+    };
+  });
   const st = $('#spaceThemes');
   st.innerHTML = Object.entries(WALK_THEMES).map(([k, t]) =>
     `<button class="btn sm${k === state.walkTheme ? ' primary' : ''}" data-stheme="${k}">${t.label}</button>`).join('');
@@ -119,6 +156,77 @@ function syncAmbUI(){
   $('#setAmbVol').value = amb.vol;
   $('#setAmbVolV').textContent = amb.vol + '%';
   $('#setChimeToggle').textContent = amb.chime ? '🔔 켜짐' : '🔕 꺼짐';
+}
+
+/* ---------- 전시 정보 (작가 프로필 + 공유) ---------- */
+function openInfoModal(){
+  const c = state.config;
+  $('#infoTitle').value = $('#exTitle').textContent.trim();
+  $('#infoSubtitle').value = c.subtitle || '';
+  $('#infoArtist').value = c.artist || '';
+  $('#infoBio').value = c.bio || '';
+  $('#infoContact').value = c.contact || '';
+  $('#infoModal').hidden = false;
+}
+function saveInfoModal(){
+  const c = state.config;
+  const title = $('#infoTitle').value.trim() || c.title;
+  c.subtitle = $('#infoSubtitle').value.trim();
+  c.artist = $('#infoArtist').value.trim();
+  c.bio = $('#infoBio').value.trim();
+  c.contact = $('#infoContact').value.trim();
+  $('#exTitle').textContent = title;
+  localStorage.setItem('ex_title_' + slug(c.title), title);
+  $('#exSubtitle').textContent = c.subtitle;
+  saveExConfig();
+  $('#infoModal').hidden = true;
+  renderGallery();
+  toast('전시 정보를 저장했어요');
+}
+function exportExhibition(){
+  const c = state.config;
+  const items = state.items.filter(it => !(it.url || '').startsWith('blob:'));
+  const dropped = state.items.length - items.length;
+  const data = {
+    app: 'photo-exhibition', version: 1, exportedAt: new Date().toISOString(),
+    config: { title: $('#exTitle').textContent.trim(), subtitle: c.subtitle, artist: c.artist, bio: c.bio, contact: c.contact, year: c.year },
+    criteria: state.criteria,
+    items: items.map(it => ({ name: it.name, title: it.title, desc: it.desc, url: it.url, type: it.type, source: it.source })),
+  };
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `전시_${($('#exTitle').textContent.trim() || 'photo').replace(/\s+/g, '_')}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast(`전시 파일로 내보냈어요 (${items.length}점${dropped ? `, 직접 올린 ${dropped}점 제외` : ''})`);
+}
+function importExhibition(file){
+  const r = new FileReader();
+  r.onload = () => {
+    try{
+      const data = JSON.parse(r.result);
+      if (!data || !Array.isArray(data.items)) throw 0;
+      const c = state.config;
+      const dc = data.config || {};
+      if (dc.title){ $('#exTitle').textContent = dc.title; localStorage.setItem('ex_title_' + slug(c.title), dc.title); }
+      if (dc.subtitle) c.subtitle = dc.subtitle;
+      if (dc.artist) c.artist = dc.artist;
+      if (typeof dc.bio === 'string') c.bio = dc.bio;
+      if (typeof dc.contact === 'string') c.contact = dc.contact;
+      $('#exSubtitle').textContent = c.subtitle;
+      saveExConfig();
+      if (data.criteria && data.criteria.max >= data.criteria.min) state.criteria = data.criteria;
+      state.items = data.items.filter(it => it && it.url).map(it => ({
+        id: 'w' + (++state.seq), name: it.name || '', title: it.title || prettyTitle(it.name),
+        desc: it.desc || '', url: it.url, type: it.type === 'video' ? 'video' : 'image', source: it.source || 'import',
+      }));
+      $('#infoModal').hidden = true;
+      renderAll();
+      toast(`${state.items.length}점을 불러왔어요`);
+    }catch(e){ toast('전시 파일을 읽지 못했어요'); }
+  };
+  r.readAsText(file);
 }
 
 /* ---------- 작품 정보 편집 ---------- */
@@ -482,50 +590,120 @@ function bindEditable(g){
 /* ---------- 3D 전시관 워크스루 ---------- */
 
 /* 3D 공간 음향: 은은한 앰비언트 패드 + 방향성 차임 (WebAudio, HRTF 패닝) */
-const amb = { ctx:null, master:null, on:true, vol:50, chime:true };
+const amb = { ctx:null, master:null, on:true, vol:50, chime:true, mode:'gallery', gen:0, nodes:[], _nb:null };
 function ambienceInit(){
-  if (amb.ctx) return;
+  if (amb.ctx){ ambienceBuild(); return; }
   const AC = window.AudioContext || window.webkitAudioContext;
   if (!AC) return;
   try{
     const ctx = new AC(); amb.ctx = ctx;
     const master = ctx.createGain(); master.gain.value = (amb.vol / 100) * 0.26; master.connect(ctx.destination);
     amb.master = master;
-    // 앰비언트 패드 (C3·G3·C4, 로우패스 + 느린 LFO)
-    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420; lp.connect(master);
-    [[130.81,'triangle'],[196.00,'triangle'],[261.63,'sine']].forEach(([f, t], i) => {
-      const o = ctx.createOscillator(); o.type = t; o.frequency.value = f; o.detune.value = i*4 - 4;
-      const g = ctx.createGain(); g.gain.value = 0.045;
-      const lfo = ctx.createOscillator(); lfo.frequency.value = 0.06 + i*0.03;
-      const lg = ctx.createGain(); lg.gain.value = 0.02;
-      lfo.connect(lg); lg.connect(g.gain);
-      o.connect(g); g.connect(lp); o.start(); lfo.start();
-    });
-    // 방향성 차임 2곳 — 걸어다니며 방향을 느낄 수 있게
-    const mkChime = (x, z, base, every) => {
-      const pan = ctx.createPanner();
-      pan.panningModel = 'HRTF'; pan.distanceModel = 'inverse';
-      pan.refDistance = 2; pan.maxDistance = 40;
-      if (pan.positionX){ pan.positionX.value = x; pan.positionY.value = 2; pan.positionZ.value = z; }
-      else pan.setPosition(x, 2, z);
-      pan.connect(master);
-      const play = () => {
-        if (!amb.on || !amb.chime || !amb.ctx) return;
+    ambienceBuild();
+  }catch(e){ /* 오디오 미지원 환경 무시 */ }
+}
+/* 공간 사운드스케이프: gallery(앰비언트 패드+차임) / rain / wind / wave */
+function ambienceBuild(){
+  const ctx = amb.ctx, master = amb.master;
+  if (!ctx || !master) return;
+  amb.gen++;
+  const myGen = amb.gen;
+  amb.nodes.forEach(n => { try{ if (n.stop) n.stop(); n.disconnect(); }catch(e){} });
+  amb.nodes = [];
+  const reg = (...ns) => amb.nodes.push(...ns);
+  const alive = () => amb.gen === myGen && amb.ctx === ctx;
+  const noiseBuf = () => {
+    if (amb._nb) return amb._nb;
+    const len = ctx.sampleRate * 2;
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    amb._nb = buf; return buf;
+  };
+  const noiseSrc = () => {
+    const s = ctx.createBufferSource(); s.buffer = noiseBuf(); s.loop = true; s.start();
+    return s;
+  };
+  try{
+    if (amb.mode === 'rain'){
+      // 빗소리: 화이트노이즈 + 로우패스 + 랜덤 물방울
+      const s = noiseSrc();
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
+      const g = ctx.createGain(); g.gain.value = 0.42;
+      s.connect(lp); lp.connect(g); g.connect(master); reg(s);
+      const drop = () => {
+        if (!alive() || !amb.on) return;
         const t = ctx.currentTime;
         const o = ctx.createOscillator(); o.type = 'sine';
-        o.frequency.value = base * (Math.random() < 0.5 ? 1 : 1.5);
-        const g = ctx.createGain();
-        g.gain.setValueAtTime(0, t);
-        g.gain.linearRampToValueAtTime(0.08, t + 0.4);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + 3.5);
-        o.connect(g); g.connect(pan); o.start(t); o.stop(t + 4);
-        setTimeout(play, every + Math.random()*5000);
+        o.frequency.value = 1800 + Math.random() * 2200;
+        const og = ctx.createGain();
+        og.gain.setValueAtTime(0.0001, t);
+        og.gain.exponentialRampToValueAtTime(0.04 + Math.random() * 0.05, t + 0.012);
+        og.gain.exponentialRampToValueAtTime(0.0001, t + 0.1 + Math.random() * 0.12);
+        o.connect(og); og.connect(master); o.start(t); o.stop(t + 0.3);
+        setTimeout(drop, 180 + Math.random() * 1100);
       };
-      setTimeout(play, 2500 + Math.random()*4000);
-    };
-    mkChime(-10, -4, 523.25, 9000);
-    mkChime(10, 4, 392.00, 12000);
-  }catch(e){ /* 오디오 미지원 환경 무시 */ }
+      setTimeout(drop, 600);
+    } else if (amb.mode === 'wind'){
+      // 바람: 노이즈 + 밴드패스 + 느린 LFO
+      const s = noiseSrc();
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 420; bp.Q.value = 0.7;
+      const g = ctx.createGain(); g.gain.value = 0.4;
+      const lfo = ctx.createOscillator(); lfo.frequency.value = 0.07;
+      const lg = ctx.createGain(); lg.gain.value = 0.28;
+      lfo.connect(lg); lg.connect(g.gain);
+      const lfo2 = ctx.createOscillator(); lfo2.frequency.value = 0.045;
+      const lg2 = ctx.createGain(); lg2.gain.value = 260;
+      lfo2.connect(lg2); lg2.connect(bp.frequency);
+      s.connect(bp); bp.connect(g); g.connect(master);
+      lfo.start(); lfo2.start(); reg(s, lfo, lfo2);
+    } else if (amb.mode === 'wave'){
+      // 파도: 노이즈 + 로우패스 + 10초 주기 스웰
+      const s = noiseSrc();
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 480;
+      const g = ctx.createGain(); g.gain.value = 0.22;
+      const lfo = ctx.createOscillator(); lfo.frequency.value = 0.09;
+      const lg = ctx.createGain(); lg.gain.value = 0.2;
+      lfo.connect(lg); lg.connect(g.gain);
+      s.connect(lp); lp.connect(g); g.connect(master);
+      lfo.start(); reg(s, lfo);
+    } else {
+      // 갤러리: 앰비언트 패드 (C3·G3·C4, 로우패스 + 느린 LFO)
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420; lp.connect(master);
+      [[130.81,'triangle'],[196.00,'triangle'],[261.63,'sine']].forEach(([f, t], i) => {
+        const o = ctx.createOscillator(); o.type = t; o.frequency.value = f; o.detune.value = i*4 - 4;
+        const g = ctx.createGain(); g.gain.value = 0.045;
+        const lfo = ctx.createOscillator(); lfo.frequency.value = 0.06 + i*0.03;
+        const lg = ctx.createGain(); lg.gain.value = 0.02;
+        lfo.connect(lg); lg.connect(g.gain);
+        o.connect(g); g.connect(lp); o.start(); lfo.start(); reg(o, lfo);
+      });
+      // 방향성 차임 2곳
+      const mkChime = (x, z, base, every) => {
+        const pan = ctx.createPanner();
+        pan.panningModel = 'HRTF'; pan.distanceModel = 'inverse';
+        pan.refDistance = 2; pan.maxDistance = 40;
+        if (pan.positionX){ pan.positionX.value = x; pan.positionY.value = 2; pan.positionZ.value = z; }
+        else pan.setPosition(x, 2, z);
+        pan.connect(master);
+        const play = () => {
+          if (!alive() || !amb.on || !amb.chime) return;
+          const t = ctx.currentTime;
+          const o = ctx.createOscillator(); o.type = 'sine';
+          o.frequency.value = base * (Math.random() < 0.5 ? 1 : 1.5);
+          const g = ctx.createGain();
+          g.gain.setValueAtTime(0, t);
+          g.gain.linearRampToValueAtTime(0.08, t + 0.4);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 3.5);
+          o.connect(g); g.connect(pan); o.start(t); o.stop(t + 4);
+          setTimeout(play, every + Math.random()*5000);
+        };
+        setTimeout(play, 2500 + Math.random()*4000);
+      };
+      mkChime(-10, -4, 523.25, 9000);
+      mkChime(10, 4, 392.00, 12000);
+    }
+  }catch(e){}
 }
 function ambienceUpdate(camera, yaw, pitch){
   if (!amb.ctx || !amb.on) return;
@@ -580,18 +758,52 @@ function renderWalkthrough(g, items){
   renderer.toneMappingExposure = 1.05;
   g.insertBefore(renderer.domElement, g.firstChild);
 
-  /* ---------- 전시장 레이아웃 (서펜타인 파티션) ---------- */
+  /* ---------- 전시장 레이아웃 ---------- */
   const N = items.length;
-  const SEGS_PER_ROW = 4, SEG_LEN = 15, SEG_T = 0.4, SEG_H = 4.2;
-  const ROW_GAP = 9, SPACING = 3.0, ART_Y = 1.75, FW = 1.9, FH = 1.2;
-  const perSide = Math.max(2, Math.floor(SEG_LEN / SPACING));
-  const rows = Math.max(1, Math.ceil(N / (perSide * 2 * SEGS_PER_ROW)));
-  const rowW = SEGS_PER_ROW * SEG_LEN + (SEGS_PER_ROW - 1) * 6;
-  const hallW = rowW + 24, hallD = (rows - 1) * ROW_GAP + 30;
+  const SEG_T = 0.4, SEG_H = 4.2;
+  const SPACING = 3.0, ART_Y = 1.75, FW = 1.9, FH = 1.2;
+  const layout = state.space.layout || 'serpentine';
+  const wallSegs = [];   // {cx, cz, len}
+  const stripDefs = [];  // {x, z, len}
+  const spotDefs = [];   // {x, z}
+  let hallW, hallD, firstRowZ;
+  if (layout === 'atrium'){
+    // 아트리움: 격자형 독립 파티션
+    const WLEN = 12, GAP = 11;
+    const perSeg = Math.max(2, Math.floor(WLEN / SPACING)) * 2;
+    const cells = Math.max(1, Math.ceil(N / perSeg));
+    const GC = Math.ceil(Math.sqrt(cells));
+    hallW = GC * GAP + 18; hallD = GC * GAP + 18;
+    let need = N;
+    for (let gz = 0; gz < GC && need > 0; gz++) for (let gx = 0; gx < GC && need > 0; gx++){
+      const cx = (gx - (GC - 1) / 2) * GAP, cz = (gz - (GC - 1) / 2) * GAP;
+      wallSegs.push({ cx, cz, len: WLEN });
+      spotDefs.push({ x: cx, z: cz });
+      need -= perSeg;
+    }
+    for (let gz = 0; gz < GC; gz++)
+      stripDefs.push({ x: 0, z: (gz - (GC - 1) / 2) * GAP, len: GC * GAP });
+    firstRowZ = -(GC - 1) / 2 * GAP;
+  } else {
+    // 서펜타인: 지그재그 파티션 행
+    const SEGS_PER_ROW = 4, SEG_LEN = 15, ROW_GAP = 9;
+    const perSeg = Math.max(2, Math.floor(SEG_LEN / SPACING)) * 2;
+    const rows = Math.max(1, Math.ceil(N / (perSeg * SEGS_PER_ROW)));
+    const rowW = SEGS_PER_ROW * SEG_LEN + (SEGS_PER_ROW - 1) * 6;
+    hallW = rowW + 24; hallD = (rows - 1) * ROW_GAP + 30;
+    for (let r = 0; r < rows; r++){
+      const z = -(rows - 1) * ROW_GAP / 2 + r * ROW_GAP;
+      for (let s = 0; s < SEGS_PER_ROW; s++)
+        wallSegs.push({ cx: -rowW / 2 + SEG_LEN / 2 + s * (SEG_LEN + 6), cz: z, len: SEG_LEN });
+      stripDefs.push({ x: 0, z, len: rowW });
+      spotDefs.push({ x: -rowW / 4, z }, { x: rowW / 4, z });
+    }
+    firstRowZ = -(rows - 1) * ROW_GAP / 2;
+  }
   const hw = hallW / 2, hd = hallD / 2, HH = 5.6;
-  const firstRowZ = -(rows - 1) * ROW_GAP / 2;
   let yaw0 = 0, pitch0 = 0;
-  const spawnZ = rows <= 2 ? Math.min(hd - 4, firstRowZ + 5.5) : hd - 4;
+  const nearSpawn = layout === 'atrium' || wallSegs.length <= 8;
+  const spawnZ = nearSpawn ? Math.min(hd - 4, firstRowZ + 5.5) : hd - 4;
   if (walkView.valid){
     camera.position.set(walkView.x, EYE, walkView.z);
     yaw0 = walkView.yaw; pitch0 = walkView.pitch;
@@ -602,21 +814,22 @@ function renderWalkthrough(g, items){
   scene.add(new THREE.HemisphereLight(theme.hemi[0], theme.hemi[1], 0.95 * state.space.light));
   // 천장 조명 스트립 + 스포트라이트 (작품 조명)
   const stripMat = new THREE.MeshBasicMaterial({ color: theme.lamp });
-  const stripGeo = new THREE.BoxGeometry(rowW, 0.09, 1.4);
   const glowMat = new THREE.MeshBasicMaterial({ color: theme.lamp, transparent: true, opacity: 0.14, blending: THREE.AdditiveBlending, depthWrite: false });
-  const glowGeo = new THREE.PlaneGeometry(rowW, 4.2);
-  for (let r = 0; r < rows; r++){
-    const z = -(rows - 1) * ROW_GAP / 2 + r * ROW_GAP;
-    const strip = new THREE.Mesh(stripGeo, stripMat);
-    strip.position.set(0, HH - 0.08, z); scene.add(strip);
-    const glow = new THREE.Mesh(glowGeo, glowMat);
-    glow.rotation.x = Math.PI / 2; glow.position.set(0, HH - 0.5, z); scene.add(glow);
-    for (const sx of [-rowW / 4, rowW / 4]){
-      const sp = new THREE.SpotLight(theme.lamp, theme.lampI * 1.6 * state.space.light, 34, 0.62, 0.45, 1.1);
-      sp.position.set(sx, HH - 0.3, z);
-      sp.target.position.set(sx, 1.1, z);
-      scene.add(sp); scene.add(sp.target);
-    }
+  const geoCache = {};
+  const boxGeo = len => geoCache['s' + len] || (geoCache['s' + len] = new THREE.BoxGeometry(len, 0.09, 1.4));
+  const glowGeoOf = len => geoCache['g' + len] || (geoCache['g' + len] = new THREE.PlaneGeometry(len, 4.2));
+  const wallGeoOf = len => geoCache['w' + len] || (geoCache['w' + len] = new THREE.BoxGeometry(len, SEG_H, SEG_T));
+  for (const sd of stripDefs){
+    const strip = new THREE.Mesh(boxGeo(sd.len), stripMat);
+    strip.position.set(sd.x, HH - 0.08, sd.z); scene.add(strip);
+    const glow = new THREE.Mesh(glowGeoOf(sd.len), glowMat);
+    glow.rotation.x = Math.PI / 2; glow.position.set(sd.x, HH - 0.5, sd.z); scene.add(glow);
+  }
+  for (const sd of spotDefs){
+    const sp = new THREE.SpotLight(theme.lamp, theme.lampI * 1.6 * state.space.light, 34, 0.62, 0.45, 1.1);
+    sp.position.set(sd.x, HH - 0.3, sd.z);
+    sp.target.position.set(sd.x, 1.1, sd.z);
+    scene.add(sp); scene.add(sp.target);
   }
 
   const floor = new THREE.Mesh(
@@ -654,7 +867,6 @@ function renderWalkthrough(g, items){
 
   const thumbUrl = it => (it.source === 'drive' ? String(it.url).replace('sz=w1920', 'sz=w400') : it.url);
   let texCount = 0;
-  const wallGeo = new THREE.BoxGeometry(SEG_LEN, SEG_H, SEG_T);
   const frameGeo = new THREE.BoxGeometry(FW + 0.16, FH + 0.16, 0.07);
   const frameMat = new THREE.MeshStandardMaterial({ color: 0x191919, roughness: .5, metalness: .25 });
   const photoGeo = new THREE.PlaneGeometry(FW, FH);
@@ -674,68 +886,95 @@ function renderWalkthrough(g, items){
   })();
 
   let idx = 0;
+  const hangOne = (x, z, ry) => {
+    const it = items[idx];
+    const grp = new THREE.Group();
+    grp.position.set(x, ART_Y, z);
+    grp.rotation.y = ry;
+    const frame = new THREE.Mesh(frameGeo, frameMat); grp.add(frame);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x2a2a2e });
+    const photo = new THREE.Mesh(photoGeo, mat);
+    photo.position.z = 0.045; photo.userData.itemId = it.id; photo.userData.index = idx;
+    grp.add(photo); photoMeshes.push(photo);
+    if (it.type === 'image'){
+      texCount++;
+      loader.load(thumbUrl(it),
+        tex => {
+          tex.colorSpace = THREE.SRGBColorSpace;
+          const ia = tex.image.width / tex.image.height, fa = FW / FH;
+          if (ia > fa){ tex.wrapS = THREE.RepeatWrapping; tex.repeat.x = fa / ia; tex.offset.x = (1 - tex.repeat.x) / 2; }
+          else { tex.wrapT = THREE.RepeatWrapping; tex.repeat.y = ia / fa; tex.offset.y = (1 - tex.repeat.y) / 2; }
+          mat.map = tex; mat.color.set(0xffffff); mat.needsUpdate = true;
+        },
+        undefined,
+        () => { mat.color.set(0x3a3a40); });
+    } else {
+      mat.map = badgeTex; mat.color.set(0xffffff);
+    }
+    // 캡션 플레이트
+    const cv = document.createElement('canvas'); cv.width = 512; cv.height = 112;
+    const c2 = cv.getContext('2d');
+    c2.fillStyle = '#f5f2ea'; c2.fillRect(0, 0, 512, 112);
+    c2.fillStyle = state.config.accent; c2.fillRect(0, 0, 512, 10);
+    c2.fillStyle = '#1c1a16'; c2.font = '600 40px "Noto Serif KR", serif';
+    c2.fillText((it.title || '무제').slice(0, 14), 28, 62);
+    c2.fillStyle = '#8a8478'; c2.font = '26px sans-serif';
+    c2.fillText(`${state.config.artist} · ${state.config.year}`, 28, 94);
+    const plateTex = new THREE.CanvasTexture(cv); plateTex.colorSpace = THREE.SRGBColorSpace;
+    const plate = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.62, 0.135),
+      new THREE.MeshBasicMaterial({ map: plateTex }));
+    plate.position.set(0, -(FH/2 + 0.24), 0.045); grp.add(plate);
+    scene.add(grp);
+    const normal = new THREE.Vector3(0, 0, 1).applyEuler(grp.rotation);
+    waypoints.push({
+      cam: grp.position.clone().add(normal.clone().multiplyScalar(3.1)).setY(EYE),
+      look: grp.position.clone(),
+    });
+    idx++;
+  };
   outer:
-  for (let r = 0; r < rows; r++){
-    const z = -(rows - 1) * ROW_GAP / 2 + r * ROW_GAP;
-    for (let s = 0; s < SEGS_PER_ROW; s++){
-      const cx = -rowW / 2 + SEG_LEN / 2 + s * (SEG_LEN + 6);
-      const wall = new THREE.Mesh(wallGeo, wallMat);
-      wall.position.set(cx, SEG_H / 2, z); scene.add(wall);
-      colliders.push({ minX: cx - SEG_LEN/2, maxX: cx + SEG_LEN/2, minZ: z - SEG_T/2, maxZ: z + SEG_T/2 });
-      for (const side of [1, -1]){
-        for (let k = 0; k < perSide; k++){
-          if (idx >= N) break outer;
-          const it = items[idx];
-          const x = cx - (perSide - 1) * SPACING / 2 + k * SPACING;
-          const grp = new THREE.Group();
-          grp.position.set(x, ART_Y, z + side * (SEG_T/2 + 0.06));
-          grp.rotation.y = side > 0 ? 0 : Math.PI;
-          const frame = new THREE.Mesh(frameGeo, frameMat); grp.add(frame);
-          const mat = new THREE.MeshBasicMaterial({ color: 0x2a2a2e });
-          const photo = new THREE.Mesh(photoGeo, mat);
-          photo.position.z = 0.045; photo.userData.itemId = it.id; photo.userData.index = idx;
-          grp.add(photo); photoMeshes.push(photo);
-          if (it.type === 'image'){
-            texCount++;
-            loader.load(thumbUrl(it),
-              tex => {
-                tex.colorSpace = THREE.SRGBColorSpace;
-                const ia = tex.image.width / tex.image.height, fa = FW / FH;
-                if (ia > fa){ tex.wrapS = THREE.RepeatWrapping; tex.repeat.x = fa / ia; tex.offset.x = (1 - tex.repeat.x) / 2; }
-                else { tex.wrapT = THREE.RepeatWrapping; tex.repeat.y = ia / fa; tex.offset.y = (1 - tex.repeat.y) / 2; }
-                mat.map = tex; mat.color.set(0xffffff); mat.needsUpdate = true;
-              },
-              undefined,
-              () => { mat.color.set(0x3a3a40); });
-          } else {
-            mat.map = badgeTex; mat.color.set(0xffffff);
-          }
-          // 캡션 플레이트
-          const cv = document.createElement('canvas'); cv.width = 512; cv.height = 112;
-          const c2 = cv.getContext('2d');
-          c2.fillStyle = '#f5f2ea'; c2.fillRect(0, 0, 512, 112);
-          c2.fillStyle = state.config.accent; c2.fillRect(0, 0, 512, 10);
-          c2.fillStyle = '#1c1a16'; c2.font = '600 40px "Noto Serif KR", serif';
-          c2.fillText((it.title || '무제').slice(0, 14), 28, 62);
-          c2.fillStyle = '#8a8478'; c2.font = '26px sans-serif';
-          c2.fillText(`${state.config.artist} · ${state.config.year}`, 28, 94);
-          const plateTex = new THREE.CanvasTexture(cv); plateTex.colorSpace = THREE.SRGBColorSpace;
-          const plate = new THREE.Mesh(
-            new THREE.PlaneGeometry(0.62, 0.135),
-            new THREE.MeshBasicMaterial({ map: plateTex }));
-          plate.position.set(0, -(FH/2 + 0.24), 0.045); grp.add(plate);
-          scene.add(grp);
-          const normal = new THREE.Vector3(0, 0, 1).applyEuler(grp.rotation);
-          waypoints.push({
-            cam: grp.position.clone().add(normal.clone().multiplyScalar(3.1)).setY(EYE),
-            look: grp.position.clone(),
-          });
-          idx++;
-        }
-      }
+  for (const seg of wallSegs){
+    const wall = new THREE.Mesh(wallGeoOf(seg.len), wallMat);
+    wall.position.set(seg.cx, SEG_H / 2, seg.cz); scene.add(wall);
+    colliders.push({ minX: seg.cx - seg.len/2, maxX: seg.cx + seg.len/2, minZ: seg.cz - SEG_T/2, maxZ: seg.cz + SEG_T/2 });
+    const perSide = Math.max(2, Math.floor(seg.len / SPACING));
+    for (const side of [1, -1]) for (let k = 0; k < perSide; k++){
+      if (idx >= N) break outer;
+      hangOne(seg.cx - (perSide - 1) * SPACING / 2 + k * SPACING, seg.cz + side * (SEG_T / 2 + 0.06), side > 0 ? 0 : Math.PI);
     }
   }
   if (texCount === 0 && loadingEl) loadingEl.remove();
+
+  // 입구 안내판 (전시 정보)
+  try{
+    const pcv = document.createElement('canvas'); pcv.width = 1024; pcv.height = 560;
+    const pc = pcv.getContext('2d');
+    pc.fillStyle = '#131316'; pc.fillRect(0, 0, 1024, 560);
+    pc.strokeStyle = '#c9a227'; pc.lineWidth = 6; pc.strokeRect(18, 18, 988, 524);
+    pc.fillStyle = '#c9a227'; pc.font = '600 30px sans-serif'; pc.textAlign = 'center';
+    pc.fillText('W E L C O M E', 512, 80);
+    pc.fillStyle = '#f4f1ea'; pc.font = '600 64px "Noto Serif KR", serif';
+    pc.fillText((state.config.title || '사진전시관').slice(0, 16), 512, 170);
+    pc.fillStyle = '#b9b3a6'; pc.font = '34px sans-serif';
+    pc.fillText(`${state.config.artist || ''} · ${state.config.year || ''}`, 512, 228);
+    pc.fillStyle = '#8a8478'; pc.font = '28px sans-serif';
+    const bio = state.config.bio || state.config.subtitle || '';
+    let line = '', yy = 292;
+    for (const ch of bio){
+      if ((line + ch).length > 30 || yy > 460){ pc.fillText(line, 512, yy); yy += 44; line = ch; }
+      else line += ch;
+      if (yy > 470) break;
+    }
+    if (line && yy <= 470) pc.fillText(line, 512, yy);
+    const ptex = new THREE.CanvasTexture(pcv); ptex.colorSpace = THREE.SRGBColorSpace;
+    const plaque = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 1.97),
+      new THREE.MeshBasicMaterial({ map: ptex }));
+    plaque.position.set(4.4, 2.0, spawnZ - 1.2); plaque.rotation.y = -0.45;
+    const pstand = new THREE.Mesh(new THREE.BoxGeometry(0.14, 1.05, 0.14), frameMat);
+    pstand.position.set(4.4, 0.52, spawnZ - 1.2);
+    scene.add(plaque); scene.add(pstand);
+  }catch(e){}
 
   /* ---------- 조작: 드래그 시점 + WASD 이동 + 충돌 ---------- */
   let walkJoyCleanup = null;
@@ -915,11 +1154,14 @@ function renderWalkthrough(g, items){
     el.removeEventListener('click', onClick);
     if (walkJoyCleanup){ window.removeEventListener('touchend', walkJoyCleanup); window.removeEventListener('touchcancel', walkJoyCleanup); walkJoyCleanup = null; }
     if (joyEl && joyEl.parentNode) joyEl.parentNode.removeChild(joyEl);
+    const sharedGeo = new Set([...Object.values(geoCache), frameGeo, photoGeo]);
+    const sharedMat = new Set([frameMat, wallMat, stripMat, glowMat]);
     scene.traverse(o => {
-      if (o.geometry && ![wallGeo, frameGeo, photoGeo, stripGeo, glowGeo].includes(o.geometry)) o.geometry.dispose();
-      if (o.material){ [].concat(o.material).forEach(m => { m.map?.dispose?.(); if (![frameMat, wallMat, stripMat].includes(m)) m.dispose(); }); }
+      if (o.geometry && !sharedGeo.has(o.geometry)) o.geometry.dispose();
+      if (o.material){ [].concat(o.material).forEach(m => { m.map?.dispose?.(); if (!sharedMat.has(m)) m.dispose(); }); }
     });
-    [wallGeo, frameGeo, photoGeo, stripGeo, glowGeo].forEach(x => x.dispose());
+    sharedGeo.forEach(g2 => g2.dispose());
+    sharedMat.forEach(m2 => m2.dispose());
     renderer.dispose();
     if (el.parentNode) el.parentNode.removeChild(el);
   };
@@ -1205,6 +1447,17 @@ function init(){
   $('#btnCritClose').addEventListener('click', () => $('#criteriaModal').hidden = true);
   $('#criteriaModal').addEventListener('click', e => { if (e.target.id === 'criteriaModal') e.target.hidden = true; });
   $('#btnCritSave').addEventListener('click', saveCriteria);
+
+  $('#btnInfo').addEventListener('click', openInfoModal);
+  $('#btnInfoClose').addEventListener('click', () => $('#infoModal').hidden = true);
+  $('#infoModal').addEventListener('click', e => { if (e.target.id === 'infoModal') e.target.hidden = true; });
+  $('#btnInfoSave').addEventListener('click', saveInfoModal);
+  $('#btnExport').addEventListener('click', exportExhibition);
+  $('#btnImport').addEventListener('click', () => $('#importFile').click());
+  $('#importFile').addEventListener('change', e => {
+    if (e.target.files[0]) importExhibition(e.target.files[0]);
+    e.target.value = '';
+  });
 
   $('#btnSpaceClose').addEventListener('click', () => $('#spaceModal').hidden = true);
   $('#spaceModal').addEventListener('click', e => { if (e.target.id === 'spaceModal') e.target.hidden = true; });
