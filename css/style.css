@@ -181,6 +181,7 @@ body.dark .styleswitch button.active{background:var(--accent);border-color:var(-
 
 /* ---------- modal ---------- */
 .modal{position:fixed;inset:0;z-index:80;background:rgba(8,8,10,.6);display:flex;align-items:center;justify-content:center;padding:20px}
+.modal[hidden]{display:none}
 .modal-card{background:#fffdf8;border:1px solid #e2ddd2;border-radius:12px;padding:26px;width:min(520px,94vw);color:var(--ink)}
 body.dark .modal-card{background:#17171b;border-color:#2a2a30;color:#e8e6e0}
 .modal-card h2{font-size:19px;margin-bottom:12px;font-family:'Noto Serif KR',serif}
