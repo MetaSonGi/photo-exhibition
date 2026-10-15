@@ -20,6 +20,7 @@ const WALK_THEMES = {
 };
 let walkCleanup = null;
 let carCleanup = null;
+const walkView = { x: 0, z: 0, yaw: 0, pitch: 0, valid: false };
 const pj = { list: [], idx: 0, timer: null };
 
 /* ---------- 헬퍼 ---------- */
@@ -519,16 +520,28 @@ function renderWalkthrough(g, items){
   const rowW = SEGS_PER_ROW * SEG_LEN + (SEGS_PER_ROW - 1) * 6;
   const hallW = rowW + 24, hallD = (rows - 1) * ROW_GAP + 30;
   const hw = hallW / 2, hd = hallD / 2, HH = 5.6;
-  camera.position.set(0, EYE, hd - 4);
+  const firstRowZ = -(rows - 1) * ROW_GAP / 2;
+  let yaw0 = 0, pitch0 = 0;
+  const spawnZ = rows <= 2 ? Math.min(hd - 4, firstRowZ + 5.5) : hd - 4;
+  if (walkView.valid){
+    camera.position.set(walkView.x, EYE, walkView.z);
+    yaw0 = walkView.yaw; pitch0 = walkView.pitch;
+  } else {
+    camera.position.set(0, EYE, spawnZ);
+  }
 
   scene.add(new THREE.HemisphereLight(theme.hemi[0], theme.hemi[1], 0.95));
   // 천장 조명 스트립 + 스포트라이트 (작품 조명)
   const stripMat = new THREE.MeshBasicMaterial({ color: theme.lamp });
-  const stripGeo = new THREE.BoxGeometry(rowW, 0.07, 0.6);
+  const stripGeo = new THREE.BoxGeometry(rowW, 0.09, 1.4);
+  const glowMat = new THREE.MeshBasicMaterial({ color: theme.lamp, transparent: true, opacity: 0.14, blending: THREE.AdditiveBlending, depthWrite: false });
+  const glowGeo = new THREE.PlaneGeometry(rowW, 4.2);
   for (let r = 0; r < rows; r++){
     const z = -(rows - 1) * ROW_GAP / 2 + r * ROW_GAP;
     const strip = new THREE.Mesh(stripGeo, stripMat);
-    strip.position.set(0, HH - 0.06, z); scene.add(strip);
+    strip.position.set(0, HH - 0.08, z); scene.add(strip);
+    const glow = new THREE.Mesh(glowGeo, glowMat);
+    glow.rotation.x = Math.PI / 2; glow.position.set(0, HH - 0.5, z); scene.add(glow);
     for (const sx of [-rowW / 4, rowW / 4]){
       const sp = new THREE.SpotLight(theme.lamp, theme.lampI * 1.6, 34, 0.62, 0.45, 1.1);
       sp.position.set(sx, HH - 0.3, z);
@@ -657,7 +670,8 @@ function renderWalkthrough(g, items){
 
   /* ---------- 조작: 드래그 시점 + WASD 이동 + 충돌 ---------- */
   let walkJoyCleanup = null;
-  let yaw = 0, pitch = 0;
+  let yaw = (typeof yaw0 !== 'undefined') ? yaw0 : 0;
+  let pitch = (typeof pitch0 !== 'undefined') ? pitch0 : 0;
   let dragging = false, lx = 0, ly = 0, moved = 0;
   const keys = {};
   const el = renderer.domElement;
@@ -802,6 +816,8 @@ function renderWalkthrough(g, items){
         -Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)));
     }
     camera.lookAt(lookTarget);
+    walkView.x = camera.position.x; walkView.z = camera.position.z;
+    walkView.yaw = yaw; walkView.pitch = pitch; walkView.valid = true;
     // 바라보는 작품 정보 카드
     if (lookCard && !tour.on && (++frame % 12 === 0)){
       camera.getWorldDirection(cdir);
@@ -840,10 +856,10 @@ function renderWalkthrough(g, items){
     if (walkJoyCleanup){ window.removeEventListener('touchend', walkJoyCleanup); window.removeEventListener('touchcancel', walkJoyCleanup); walkJoyCleanup = null; }
     if (joyEl && joyEl.parentNode) joyEl.parentNode.removeChild(joyEl);
     scene.traverse(o => {
-      if (o.geometry && ![wallGeo, frameGeo, photoGeo, stripGeo].includes(o.geometry)) o.geometry.dispose();
+      if (o.geometry && ![wallGeo, frameGeo, photoGeo, stripGeo, glowGeo].includes(o.geometry)) o.geometry.dispose();
       if (o.material){ [].concat(o.material).forEach(m => { m.map?.dispose?.(); if (![frameMat, wallMat, stripMat].includes(m)) m.dispose(); }); }
     });
-    [wallGeo, frameGeo, photoGeo, stripGeo].forEach(x => x.dispose());
+    [wallGeo, frameGeo, photoGeo, stripGeo, glowGeo].forEach(x => x.dispose());
     renderer.dispose();
     if (el.parentNode) el.parentNode.removeChild(el);
   };
