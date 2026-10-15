@@ -6,10 +6,17 @@ const VID_EXT = ['mp4','webm','mov','m4v'];
 
 const state = {
   config: { title:'사진전시관', subtitle:'다섯 개의 방에 거는 사진들', accent:'#c9a227', accent2:'#e8c874', artist:'MetaSongi', year:'2026' },
-  criteria: { min: 4, max: 24 },
+  criteria: { min: 4, max: 100 },
   items: [],
   style: 'whitecube',
+  walkTheme: 'whitecube',
   seq: 0,
+};
+/* 3D 전시관 공간 디자인 테마 */
+const WALK_THEMES = {
+  whitecube:  { label:'화이트큐브', bg:0x0e0e10, fog:[0x0e0e10,14,34], wall:0xece5d8, floor:0x8a6f52, ceil:0x17171a, hemi:[0xfff6e8,0x2a2a30], lamp:0xffe2b0, lampI:0.55 },
+  darkmood:   { label:'다크 무드', bg:0x060607, fog:[0x060607,11,28], wall:0x232328, floor:0x141416, ceil:0x0b0b0d, hemi:[0xa9bdf5,0x14151c], lamp:0xa9bdf5, lampI:0.7 },
+  industrial: { label:'인더스트리얼', bg:0x131210, fog:[0x131210,13,32], wall:0x53524e, floor:0x3c3833, ceil:0x232220, hemi:[0xffd9a0,0x2e271c], lamp:0xffc37a, lampI:0.6 },
 };
 let walkCleanup = null;
 let carCleanup = null;
@@ -92,6 +99,12 @@ function addItems(files){
   }
   return n;
 }
+/* 데모 → 내 사진으로 교체 */
+function swapOutDemo(){
+  const n = state.items.filter(i => i.source === 'demo').length;
+  if (n) state.items = state.items.filter(i => i.source !== 'demo');
+  return n;
+}
 async function loadDemo(){
   try{
     const r = await fetch('assets/demo/manifest.json');
@@ -112,9 +125,10 @@ async function loadDemo(){
 }
 function onFilesChosen(e){
   const files = [...(e.target.files || [])];
+  const swapped = swapOutDemo();
   const n = addItems(files);
   e.target.value = '';
-  if (n){ renderAll(); toast(`${n}점을 전시실에 걸었어요`); }
+  if (n){ renderAll(); toast(`${n}점을 전시실에 걸었어요${swapped ? ` · 데모 ${swapped}점을 교체했어요` : ''}`); }
   else toast('사진·영상 파일이 없어요');
 }
 
@@ -256,7 +270,7 @@ function renderMarquee(g, items){
 }
 /* --- 3D 캐러셀 --- */
 function renderCarousel(g, items){
-  const list = items.slice(0, 24);
+  const list = items.slice(0, 64);
   g.innerHTML = `<div class="car-stage" id="carStage"></div>
     <div class="walk-hint">드래그로 회전 · 클릭으로 크게 보기</div>`;
   const stage = $('#carStage');
@@ -394,18 +408,89 @@ function bindEditable(g){
 }
 
 /* ---------- 3D 전시관 워크스루 ---------- */
+
+/* 3D 공간 음향: 은은한 앰비언트 패드 + 방향성 차임 (WebAudio, HRTF 패닝) */
+const amb = { ctx:null, master:null, on:true };
+function ambienceInit(){
+  if (amb.ctx) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  try{
+    const ctx = new AC(); amb.ctx = ctx;
+    const master = ctx.createGain(); master.gain.value = 0.13; master.connect(ctx.destination);
+    amb.master = master;
+    // 앰비언트 패드 (C3·G3·C4, 로우패스 + 느린 LFO)
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420; lp.connect(master);
+    [[130.81,'triangle'],[196.00,'triangle'],[261.63,'sine']].forEach(([f, t], i) => {
+      const o = ctx.createOscillator(); o.type = t; o.frequency.value = f; o.detune.value = i*4 - 4;
+      const g = ctx.createGain(); g.gain.value = 0.045;
+      const lfo = ctx.createOscillator(); lfo.frequency.value = 0.06 + i*0.03;
+      const lg = ctx.createGain(); lg.gain.value = 0.02;
+      lfo.connect(lg); lg.connect(g.gain);
+      o.connect(g); g.connect(lp); o.start(); lfo.start();
+    });
+    // 방향성 차임 2곳 — 걸어다니며 방향을 느낄 수 있게
+    const mkChime = (x, z, base, every) => {
+      const pan = ctx.createPanner();
+      pan.panningModel = 'HRTF'; pan.distanceModel = 'inverse';
+      pan.refDistance = 2; pan.maxDistance = 40;
+      if (pan.positionX){ pan.positionX.value = x; pan.positionY.value = 2; pan.positionZ.value = z; }
+      else pan.setPosition(x, 2, z);
+      pan.connect(master);
+      const play = () => {
+        if (!amb.on || !amb.ctx) return;
+        const t = ctx.currentTime;
+        const o = ctx.createOscillator(); o.type = 'sine';
+        o.frequency.value = base * (Math.random() < 0.5 ? 1 : 1.5);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(0.08, t + 0.4);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 3.5);
+        o.connect(g); g.connect(pan); o.start(t); o.stop(t + 4);
+        setTimeout(play, every + Math.random()*5000);
+      };
+      setTimeout(play, 2500 + Math.random()*4000);
+    };
+    mkChime(-10, -4, 523.25, 9000);
+    mkChime(10, 4, 392.00, 12000);
+  }catch(e){ /* 오디오 미지원 환경 무시 */ }
+}
+function ambienceUpdate(camera, yaw, pitch){
+  if (!amb.ctx || !amb.on) return;
+  const L = amb.ctx.listener, p = camera.position;
+  const fx = -Math.sin(yaw)*Math.cos(pitch), fy = Math.sin(pitch), fz = -Math.cos(yaw)*Math.cos(pitch);
+  try{
+    if (L.positionX){
+      L.positionX.value = p.x; L.positionY.value = p.y; L.positionZ.value = p.z;
+      L.forwardX.value = fx; L.forwardY.value = fy; L.forwardZ.value = fz;
+      L.upX.value = 0; L.upY.value = 1; L.upZ.value = 0;
+    } else {
+      L.setPosition(p.x, p.y, p.z); L.setOrientation(fx, fy, fz, 0, 1, 0);
+    }
+  }catch(e){}
+}
+function ambienceSet(on){
+  amb.on = on;
+  if (amb.ctx){ on ? amb.ctx.resume().catch(()=>{}) : amb.ctx.suspend().catch(()=>{}); }
+}
+
 function renderWalkthrough(g, items){
   if (typeof THREE === 'undefined'){ toast('3D 라이브러리를 불러오지 못했어요'); return; }
+  const theme = WALK_THEMES[state.walkTheme] || WALK_THEMES.whitecube;
+  const themeBtns = Object.entries(WALK_THEMES).map(([k, t]) =>
+    `<button class="btn sm${k === state.walkTheme ? ' primary' : ''}" data-wtheme="${k}">${t.label}</button>`).join('');
   g.innerHTML = `
     <div class="walk-ui">
       <button class="btn" id="btnTour">🎧 도슨트 투어</button>
+      <button class="btn" id="btnSound">${amb.on ? '🔊 공간음향' : '🔇 음향꺼짐'}</button>
       <button class="btn" id="btnWalkHelp">❔ 조작법</button>
     </div>
+    <div class="walk-ui walk-themes"><span class="walk-themes-label">🎨 공간 디자인</span>${themeBtns}</div>
     <div class="walk-hint">드래그: 시점 회전 · W A S D: 이동 · 작품 클릭: 크게 보기</div>`;
   const W = g.clientWidth, H = 620;
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0e0e10);
-  scene.fog = new THREE.Fog(0x0e0e10, 14, 34);
+  scene.background = new THREE.Color(theme.bg);
+  scene.fog = new THREE.Fog(theme.fog[0], theme.fog[1], theme.fog[2]);
   const camera = new THREE.PerspectiveCamera(68, W/H, 0.1, 100);
   const EYE = 1.65;
   camera.position.set(0, EYE, 5.5);
@@ -415,20 +500,20 @@ function renderWalkthrough(g, items){
   renderer.shadowMap.enabled = true;
   g.insertBefore(renderer.domElement, g.firstChild);
 
-  scene.add(new THREE.HemisphereLight(0xfff6e8, 0x2a2a30, 0.85));
+  scene.add(new THREE.HemisphereLight(theme.hemi[0], theme.hemi[1], 0.85));
   const ROOM = { w: 26, d: 18, h: 4.4 };
   const hw = ROOM.w/2, hd = ROOM.d/2;
 
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(ROOM.w, ROOM.d),
-    new THREE.MeshStandardMaterial({ color: 0x8a6f52, roughness: .9 }));
+    new THREE.MeshStandardMaterial({ color: theme.floor, roughness: .9 }));
   floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; scene.add(floor);
   const ceil = new THREE.Mesh(
     new THREE.PlaneGeometry(ROOM.w, ROOM.d),
-    new THREE.MeshStandardMaterial({ color: 0x17171a, roughness: 1 }));
+    new THREE.MeshStandardMaterial({ color: theme.ceil, roughness: 1 }));
   ceil.rotation.x = Math.PI/2; ceil.position.y = ROOM.h; scene.add(ceil);
 
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0xece5d8, roughness: .95 });
+  const wallMat = new THREE.MeshStandardMaterial({ color: theme.wall, roughness: .95 });
   const mkWall = (w, h, x, y, z, ry) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), wallMat);
     m.position.set(x, y, z); m.rotation.y = ry; m.receiveShadow = true; scene.add(m);
@@ -439,9 +524,13 @@ function renderWalkthrough(g, items){
   mkWall(ROOM.d, ROOM.h,  hw, ROOM.h/2, 0, -Math.PI/2);
   // 천장 조명
   for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++){
-    const pl = new THREE.PointLight(0xffe2b0, 0.55, 26);
+    const pl = new THREE.PointLight(theme.lamp, theme.lampI, 26);
     pl.position.set(i*8, ROOM.h-0.4, j*5.4); scene.add(pl);
   }
+
+  // 공간 음향 시작 (클릭 진입이라 사용자 제스처 하에서 생성됨)
+  ambienceInit();
+  if (amb.on && amb.ctx) amb.ctx.resume().catch(() => {});
 
   // 작품 배치
   const loader = new THREE.TextureLoader();
@@ -453,7 +542,7 @@ function renderWalkthrough(g, items){
     { len: ROOM.d, fixed: -hw+0.06, axis: 'x', dir: 1 },   // 서
     { len: ROOM.d, fixed:  hw-0.06, axis: 'x', dir: -1 },  // 동
   ];
-  const list = items.slice(0, 32);
+  const list = items.slice(0, 48);
   const perWall = Math.ceil(list.length / 4);
   const waypoints = [];
   list.forEach((it, i) => {
@@ -563,6 +652,16 @@ function renderWalkthrough(g, items){
   });
   $('#btnWalkHelp').addEventListener('click', () =>
     toast('드래그: 둘러보기 · W A S D / 방향키: 이동 · 작품 클릭: 크게 보기'));
+  $('#btnSound').addEventListener('click', () => {
+    ambienceSet(!amb.on);
+    $('#btnSound').textContent = amb.on ? '🔊 공간음향' : '🔇 음향꺼짐';
+    if (amb.on) toast('3D 공간 음향을 켰어요');
+  });
+  g.querySelectorAll('[data-wtheme]').forEach(b => b.addEventListener('click', () => {
+    state.walkTheme = b.dataset.wtheme;
+    renderGallery();
+    toast(`${WALK_THEMES[state.walkTheme].label} 공간으로 바꿨어요`);
+  }));
 
   const fwd = new THREE.Vector3(), rgt = new THREE.Vector3();
   let raf = 0, alive = true, last = performance.now();
@@ -601,6 +700,7 @@ function renderWalkthrough(g, items){
         -Math.sin(yaw)*Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw)*Math.cos(pitch)));
     }
     camera.lookAt(lookTarget);
+    ambienceUpdate(camera, yaw, pitch);
     renderer.render(scene, camera);
     raf = requestAnimationFrame(animate);
   };
@@ -615,6 +715,7 @@ function renderWalkthrough(g, items){
 
   walkCleanup = () => {
     alive = false; cancelAnimationFrame(raf);
+    if (amb.ctx) amb.ctx.suspend().catch(() => {}); // 전시관 나가면 음향 정지
     el.removeEventListener('pointerdown', pDown);
     window.removeEventListener('pointermove', pMove);
     window.removeEventListener('pointerup', pUp);
@@ -774,6 +875,7 @@ async function importDriveFolder(){
     await walk(fid, 0, '');
     if (!media.length){ toast('폴더에 사진·영상이 없어요. 폴더 공유 설정을 확인해 주세요'); return; }
     localStorage.setItem('ex_drivekey_' + slug(state.config.title), key);
+    const swapped = swapOutDemo();
     for (const f of media){
       const isVideo = (f.mimeType || '').startsWith('video');
       const title = f.path ? `${f.path} — ${prettyTitle(f.name)}` : prettyTitle(f.name);
@@ -789,12 +891,62 @@ async function importDriveFolder(){
     $('#driveFolderInput').value = '';
     $('#linkModal').hidden = true;
     renderAll();
-    toast(`${media.length}점을 가져왔어요`);
+    toast(`${media.length}점을 가져왔어요${swapped ? ` · 데모 ${swapped}점을 교체했어요` : ''}`);
     setTimeout(() => $('#gallery')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
   }catch(e){
     toast(e.message === 'key'
       ? 'API 키가 올바르지 않아요. 키를 확인해 주세요'
       : '폴더를 읽지 못했어요. 폴더가 "링크가 있는 모든 사용자"로 공유되어 있는지 확인해 주세요');
+  }
+}
+
+/* ---------- AI 자동 설명 (Gemini BYOK) ---------- */
+const getAiKey = () => (localStorage.getItem('ex_aikey_' + slug(state.config.title)) || '').trim();
+function blobToB64(blob){
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(String(fr.result).split(',')[1] || '');
+    fr.onerror = rej;
+    fr.readAsDataURL(blob);
+  });
+}
+async function autoDescribeCurrent(){
+  const it = lb.list[lb.idx];
+  if (!it){ toast('설명할 사진을 먼저 열어주세요'); return; }
+  if (it.type !== 'image'){ toast('사진에만 자동 설명을 쓸 수 있어요'); return; }
+  let key = getAiKey();
+  if (!key){
+    $('#aiKeyInput').value = '';
+    $('#aiModal').hidden = false;
+    toast('먼저 Gemini API 키를 등록해 주세요 (무료)');
+    return;
+  }
+  toast('AI가 제목과 설명을 짓는 중…');
+  try{
+    const blob = await (await fetch(it.url)).blob();
+    const b64 = await blobToB64(blob);
+    if (!b64) throw new Error('img');
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(key)}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [
+          { text: '이 사진에 어울리는 전시 작품 제목(15자 이내 한국어)과 2문장 이내의 작품 설명을 지어줘. 반드시 아래 JSON 형식으로만 답해, 다른 말은 하지 마: {"title":"...","desc":"..."}' },
+          { inline_data: { mime_type: blob.type || 'image/jpeg', data: b64 } },
+        ]}]}) });
+    if (!r.ok) throw new Error('api');
+    const j = await r.json();
+    const txt = (j.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');
+    const m = txt.match(/\{[\s\S]*\}/);
+    if (!m) throw new Error('parse');
+    const d = JSON.parse(m[0]);
+    if (d.title) it.title = String(d.title).slice(0, 30);
+    if (d.desc) it.desc = String(d.desc).slice(0, 500);
+    saveItems(); renderLb();
+    toast('자동 설명을 넣었어요 — 클릭해서 직접 고칠 수 있어요');
+  }catch(e){
+    toast(e.message === 'img'
+      ? '이 사진은 AI가 읽을 수 없어요 (외부 링크는 직접 설명을 입력해주세요)'
+      : '자동 설명에 실패했어요. API 키를 확인해 주세요');
   }
 }
 
@@ -808,8 +960,9 @@ function setupDrop(){
   window.addEventListener('drop', e => {
     e.preventDefault(); depth = 0; show(false);
     const files = [...(e.dataTransfer?.files || [])];
+    const swapped = swapOutDemo();
     const n = addItems(files);
-    if (n){ renderAll(); toast(`${n}점을 전시실에 걸었어요`); }
+    if (n){ renderAll(); toast(`${n}점을 전시실에 걸었어요${swapped ? ` · 데모 ${swapped}점을 교체했어요` : ''}`); }
     else if (files.length) toast('사진·영상 파일이 없어요');
   });
 }
@@ -846,10 +999,11 @@ function init(){
       toast('폴더 링크는 아래 "📁 드라이브 폴더 통째로"에서 가져와 주세요');
       return;
     }
+    const swapped = swapOutDemo();
     const { n, bad } = addLinkItems(raw);
     $('#linkInput').value = '';
     $('#linkModal').hidden = true;
-    if (n){ renderAll(); toast(`${n}점을 가져왔어요${bad ? ` (${bad}개 인식 실패)` : ''}`); }
+    if (n){ renderAll(); toast(`${n}점을 가져왔어요${bad ? ` (${bad}개 인식 실패)` : ''}${swapped ? ` · 데모 ${swapped}점을 교체했어요` : ''}`); }
     else toast('가져올 수 있는 링크가 없어요');
   });
   $('#btnFolderAdd').addEventListener('click', importDriveFolder);
@@ -858,6 +1012,19 @@ function init(){
   $('#btnCritClose').addEventListener('click', () => $('#criteriaModal').hidden = true);
   $('#criteriaModal').addEventListener('click', e => { if (e.target.id === 'criteriaModal') e.target.hidden = true; });
   $('#btnCritSave').addEventListener('click', saveCriteria);
+
+  $('#btnAi').addEventListener('click', () => {
+    $('#aiKeyInput').value = getAiKey();
+    $('#aiModal').hidden = false;
+  });
+  $('#btnAiClose').addEventListener('click', () => $('#aiModal').hidden = true);
+  $('#aiModal').addEventListener('click', e => { if (e.target.id === 'aiModal') e.target.hidden = true; });
+  $('#btnAiSave').addEventListener('click', () => {
+    localStorage.setItem('ex_aikey_' + slug(state.config.title), $('#aiKeyInput').value.trim());
+    $('#aiModal').hidden = true;
+    toast($('#aiKeyInput').value.trim() ? 'AI 설명 키를 저장했어요' : 'AI 설명 키를 지웠어요');
+  });
+  $('#lbAiDesc').addEventListener('click', autoDescribeCurrent);
 
   $('#styleSwitch').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
     setActiveNav(b.dataset.style);

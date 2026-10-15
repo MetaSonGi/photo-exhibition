@@ -23,6 +23,7 @@
     <button class="btn ghost" id="btnFiles">💻 파일 올리기</button>
     <button class="btn ghost" id="btnLink">🔗 링크 가져오기</button>
     <button class="btn ghost" id="btnDemo">✨ 데모 전시</button>
+    <button class="btn ghost" id="btnAi">🤖 AI 설명</button>
     <button class="btn ghost" id="btnCriteria" title="전시 사진 장수 기준">⚙️ 전시 기준</button>
   </div>
 </header>
@@ -67,6 +68,10 @@
       <h3 id="lbTitle"></h3>
       <p class="lb-meta" id="lbMeta"></p>
       <p class="lb-desc" id="lbDesc"></p>
+      <div class="lb-actions">
+        <button class="btn sm" id="lbAiDesc">✨ AI 자동 설명</button>
+        <span class="lb-hint">제목·설명을 클릭하면 직접 수정할 수 있어요</span>
+      </div>
     </figcaption>
   </figure>
 </div>
@@ -90,9 +95,9 @@
     <h2>⚙️ 전시 기준</h2>
     <p class="hint">한 전시에 걸 사진의 최소·최대 장수를 정하세요.<br>기준을 벗어나면 갤러리 상단에 알려줍니다.</p>
     <div class="crit-row">
-      <label>최소 <input type="number" id="critMin" min="1" max="99" value="4"> 장</label>
+      <label>최소 <input type="number" id="critMin" min="1" max="999" value="4"> 장</label>
       <span>~</span>
-      <label>최대 <input type="number" id="critMax" min="1" max="99" value="24"> 장</label>
+      <label>최대 <input type="number" id="critMax" min="1" max="999" value="100"> 장</label>
     </div>
     <div class="modal-actions">
       <span class="spacer"></span>
@@ -120,6 +125,21 @@
       <span class="spacer"></span>
       <button class="btn ghost sm" id="btnLinkClose">닫기</button>
       <button class="btn primary sm" id="btnFolderAdd">폴더 가져오기</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="aiModal" hidden>
+  <div class="modal-card">
+    <h2>🤖 AI 자동 설명</h2>
+    <p class="hint">사진을 크게 본 상태에서 <b>✨ AI 자동 설명</b>을 누르면<br>Gemini가 작품 제목과 설명을 자동으로 지어줍니다.<br>직접 쓴 설명은 그대로 유지됩니다.</p>
+    <p class="hint"><b>Gemini API 키</b> (무료, 1회 발급) — 이 브라우저에만 저장됩니다.</p>
+    <input type="password" id="aiKeyInput" class="textin" placeholder="Gemini API 키 (AIza…)">
+    <p class="hint small">키 발급: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio → API 키 만들기</a> (약 1분)</p>
+    <div class="modal-actions">
+      <span class="spacer"></span>
+      <button class="btn ghost sm" id="btnAiClose">닫기</button>
+      <button class="btn primary sm" id="btnAiSave">저장</button>
     </div>
   </div>
 </div>

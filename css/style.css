@@ -314,3 +314,12 @@ body.dark .car-item .ccap{color:#e8e6e0}
   .lb-nav{display:none}
   .g-walk{height:480px}
 }
+
+/* 3D 공간 테마 선택줄 */
+.walk-themes{top:auto;bottom:52px;left:14px;align-items:center;background:rgba(10,10,12,.55);padding:6px 10px;border-radius:12px;backdrop-filter:blur(6px)}
+.walk-themes-label{font-size:12px;color:#d8d3c6;white-space:nowrap}
+.walk-themes .btn{font-size:12px;padding:5px 10px}
+/* 라이트박스 AI 설명 */
+.lb-actions{display:flex;align-items:center;gap:10px;margin-top:14px}
+.lb-hint{font-size:12px;color:#8f897c}
+@media (max-width:640px){.lb-actions{flex-direction:column;align-items:stretch}.walk-themes{bottom:auto;top:64px}}
