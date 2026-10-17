@@ -950,7 +950,7 @@ function renderWalkthrough(g, items){
       <button class="btn sm" id="btnWInfo">🖋️ 전시 정보</button>
       <button class="btn sm" id="btnWCriteria">⚙️ 전시 기준</button>
     </div>
-    <div class="walk-hint">드래그: 시점 회전 · W A S D: 이동 · 작품 클릭: 크게 보기</div>
+    <div class="walk-hint">${('ontouchstart' in window) ? '드래그: 둘러보기 · 조이스틱: 이동 · 작품 터치: 크게 보기' : '드래그: 시점 회전 · W A S D: 이동 · 작품 클릭: 크게 보기'}</div>
     <div class="walk-loading" id="walkLoading">
       <div class="walk-loading-t">🖼️ 전시장을 준비하는 중…</div>
       <div class="walk-loading-bar"><div id="walkBar"></div></div>
