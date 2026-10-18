@@ -277,7 +277,9 @@ function saveSpace(){
   }catch(e){}
 }
 
-const LAYOUTS = { serpentine:'서펜타인 홀', atrium:'아트리움', rotunda:'로툰다', maze:'미로' };
+const LAYOUTS = { serpentine:'서펜타인 홀', atrium:'아트리움', rotunda:'로툰다', maze:'미로', palace:'궁전', cathedral:'성당' };
+const glbCache = {}; // 공간 모델명 -> dataURL (메모리)
+let hungIdsClear = () => {};
 
 /* ---------- 상단 ☰ 메뉴 ---------- */
 function bindTopMenu(){
@@ -297,6 +299,7 @@ function openSpaceModal(){
   lay.querySelectorAll('button').forEach(b => {
     b.onclick = () => {
       state.space.layout = b.dataset.layout;
+      state.space.customGLB = null; state.space.hung = [];
       saveSpace(); openSpaceModal(); renderGallery();
       toast(`'${LAYOUTS[b.dataset.layout]}' 배치로 바꿨어요`);
     };
@@ -972,6 +975,9 @@ function renderWalkthrough(g, items){
       <button class="btn sm" id="btnFull">⛶ 전체화면</button>
       <button class="btn sm" id="btnViewReset" title="시점을 입구로 되돌리기">⌂ 시점</button>
       <button class="btn sm" id="btnWalkMenu" title="가져오기·설정 메뉴">☰</button>
+      <button class="btn sm" id="btnHang" hidden>🖼️ 벽에 걸기</button>
+      <button class="btn sm" id="btnHangClear" hidden title="걸린 액자 모두 치우기">🗑️</button>
+      <input type="file" id="glbFile" accept=".glb" hidden>
     </div>
     <div class="walk-menu" id="walkMenu" hidden>
       <button class="btn sm" id="btnWFolder">📁 폴더 열기</button>
@@ -981,6 +987,7 @@ function renderWalkthrough(g, items){
       <button class="btn sm" id="btnWAi">🤖 AI 설명</button>
       <button class="btn sm" id="btnWInfo">🖋️ 전시 정보</button>
       <button class="btn sm" id="btnWCriteria">⚙️ 전시 기준</button>
+      <button class="btn sm" id="btnWGlb">🏛️ 3D 공간 가져오기</button>
     </div>
     <div class="walk-hint">${('ontouchstart' in window) ? '드래그: 둘러보기 · 조이스틱: 이동 · 작품 터치: 크게 보기' : '드래그: 시점 회전 · W A S D: 이동 · 작품 클릭: 크게 보기'}</div>
     <div class="walk-loading" id="walkLoading">
@@ -1010,8 +1017,13 @@ function renderWalkthrough(g, items){
   const wallSegs = [];   // {cx, cz, len}
   const stripDefs = [];  // {x, z, len}
   const spotDefs = [];   // {x, z}
-  let hallW, hallD, firstRowZ;
-  if (layout === 'atrium'){
+  let hallW, hallD, firstRowZ, HH = 6.4;
+  const customName = state.space.customGLB && state.space.customGLB.name;
+  const customUrl = customName && (glbCache[customName] || (() => { try{ return localStorage.getItem('ex_glb_' + slug(state.config.title)); }catch(e){ return null; } })());
+  const useCustom = !!(customName && customUrl && typeof THREE.GLTFLoader !== 'undefined');
+  if (useCustom){
+    hallW = 46; hallD = 46; firstRowZ = 0;
+  } else if (layout === 'atrium'){
     // 아트리움: 격자형 독립 파티션
     const WLEN = 14, GAP = 13;
     const perSeg = Math.max(2, Math.floor(WLEN / SPACING)) * 2;
@@ -1069,6 +1081,24 @@ function renderWalkthrough(g, items){
       spotDefs.push({ x: -trackW / 4, z }, { x: trackW / 4, z });
     }
     firstRowZ = -(rows - 1) * ROW_GAP / 2;
+  } else if (layout === 'palace'){
+    // 궁전: 외벽 액자 + 중앙 월대와 붉은 기둥
+    hallW = 64; hallD = 44;
+    const inset = 2.4;
+    wallSegs.push({ cx: 0, cz: -hallD / 2 + inset, len: hallW - 12 });
+    wallSegs.push({ cx: 0, cz: hallD / 2 - inset, len: hallW - 12 });
+    wallSegs.push({ cx: -hallW / 2 + inset, cz: 0, len: hallD - 12, ry: Math.PI / 2 });
+    wallSegs.push({ cx: hallW / 2 - inset, cz: 0, len: hallD - 12, ry: Math.PI / 2 });
+    for (const sd of wallSegs){ stripDefs.push({ x: sd.cx, z: sd.cz, len: sd.len, ry: sd.ry || 0 }); spotDefs.push({ x: sd.cx, z: sd.cz }); }
+    firstRowZ = hallD;
+  } else if (layout === 'cathedral'){
+    // 성당: 긴 네이브, 양쪽 열주, 외벽 액자
+    HH = 9.5;
+    hallW = 30; hallD = 72;
+    wallSegs.push({ cx: -hallW / 2 + 2.4, cz: 0, len: hallD - 12, ry: Math.PI / 2 });
+    wallSegs.push({ cx: hallW / 2 + 2.4, cz: 0, len: hallD - 12, ry: Math.PI / 2 });
+    for (const sd of wallSegs){ stripDefs.push({ x: sd.cx, z: sd.cz, len: sd.len, ry: sd.ry || 0 }); spotDefs.push({ x: sd.cx, z: sd.cz }); }
+    firstRowZ = hallD;
   } else {
     // 서펜타인: 지그재그 파티션 행
     const SEGS_PER_ROW = 5, SEG_LEN = 16, ROW_GAP = 11, SEG_GAP = 7;
@@ -1085,7 +1115,7 @@ function renderWalkthrough(g, items){
     }
     firstRowZ = -(rows - 1) * ROW_GAP / 2;
   }
-  const hw = hallW / 2, hd = hallD / 2, HH = 6.4;
+  const hw = hallW / 2, hd = hallD / 2;
   let yaw0 = 0, pitch0 = 0;
   const nearSpawn = layout === 'atrium' || wallSegs.length <= 8;
   const spawnZ = nearSpawn ? Math.min(hd - 4, firstRowZ + 5.5) : hd - 4;
@@ -1120,27 +1150,59 @@ function renderWalkthrough(g, items){
     sp.target.position.set(sd.x, 1.1, sd.z);
     scene.add(sp); scene.add(sp.target);
   }
+  if (useCustom){
+    for (const [sx, sz] of [[-12, -12], [12, -12], [-12, 12], [12, 12]]){
+      const sp = new THREE.SpotLight(theme.lamp, theme.lampI * 1.6 * state.space.light, 40, 0.7, 0.5, 1.1);
+      sp.position.set(sx, 9, sz); sp.target.position.set(0, 1, 0);
+      scene.add(sp); scene.add(sp.target);
+    }
+  }
 
   const wallCv = texCanvas(theme.wallTex || 'plaster', hexCss(theme.wall));
   const floorCv = texCanvas(theme.floorTex || 'concrete', hexCss(theme.floor));
   const floorMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .3, metalness: .12, map: tiledTex(floorCv, 12, 12) });
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(hallW, hallD), floorMat);
   floor.rotation.x = -Math.PI/2; scene.add(floor);
+  // 커스텀 3D 공간 모델
+  const customMeshes = [];
+  let customBounds = null, customLoaded = false;
+  if (useCustom && typeof THREE.GLTFLoader !== 'undefined'){
+    new THREE.GLTFLoader().load(customUrl, gltf => {
+      const model = gltf.scene;
+      const bbox = new THREE.Box3().setFromObject(model);
+      const size = bbox.getSize(new THREE.Vector3());
+      const s = Math.max(size.x, size.z) > 0 ? 46 / Math.max(size.x, size.z) : 1;
+      model.scale.setScalar(s);
+      model.updateMatrixWorld(true);
+      const b2 = new THREE.Box3().setFromObject(model);
+      model.position.sub(new THREE.Vector3((b2.min.x + b2.max.x) / 2, b2.min.y, (b2.min.z + b2.max.z) / 2));
+      scene.add(model);
+      model.updateMatrixWorld(true);
+      const b3 = new THREE.Box3().setFromObject(model);
+      customBounds = { x0: b3.min.x + 1, x1: b3.max.x - 1, z0: b3.min.z + 1, z1: b3.max.z - 1 };
+      model.traverse(o => { if (o.isMesh) customMeshes.push(o); });
+      customLoaded = true;
+    }, undefined, () => toast('3D 공간 모델을 불러오지 못했어요'));
+  }
   const ceilCv = texCanvas(theme.ceilTex || 'plaster', hexCss(theme.ceil));
-  const ceil = new THREE.Mesh(
-    new THREE.PlaneGeometry(hallW, hallD),
-    new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, map: tiledTex(ceilCv, 18, 18) }));
-  ceil.rotation.x = Math.PI/2; ceil.position.y = HH; scene.add(ceil);
+  if (!useCustom){
+    const ceil = new THREE.Mesh(
+      new THREE.PlaneGeometry(hallW, hallD),
+      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, map: tiledTex(ceilCv, 18, 18) }));
+    ceil.rotation.x = Math.PI/2; ceil.position.y = HH; scene.add(ceil);
+  }
   const wallMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .95, map: tiledTex(wallCv, 5, 1.4) });
   const wallMatOuter = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .95, map: tiledTex(wallCv, 30, 3) });
   const mkWall = (w, h, x, y, z, ry) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), wallMatOuter);
     m.position.set(x, y, z); m.rotation.y = ry; scene.add(m);
   };
-  mkWall(hallW, HH, 0, HH/2, -hd, 0);
-  mkWall(hallW, HH, 0, HH/2,  hd, Math.PI);
-  mkWall(hallD, HH, -hw, HH/2, 0, Math.PI/2);
-  mkWall(hallD, HH,  hw, HH/2, 0, -Math.PI/2);
+  if (!useCustom){
+    mkWall(hallW, HH, 0, HH/2, -hd, 0);
+    mkWall(hallW, HH, 0, HH/2,  hd, Math.PI);
+    mkWall(hallD, HH, -hw, HH/2, 0, Math.PI/2);
+    mkWall(hallD, HH,  hw, HH/2, 0, -Math.PI/2);
+  }
 
   // 공간 음향
   ambienceInit();
@@ -1178,15 +1240,18 @@ function renderWalkthrough(g, items){
   })();
 
   let idx = 0;
-  const hangOne = (x, z, ry) => {
-    const it = items[idx];
+  const hungIds = new Set((state.space.hung || []).map(h => h.id));
+  hungIdsClear = () => hungIds.clear();
+  const hangOne = (x, z, ry, item) => {
+    const it = item || items[idx++];
+    if (!it) return;
     const grp = new THREE.Group();
     grp.position.set(x, ART_Y, z);
     grp.rotation.y = ry;
     const frame = new THREE.Mesh(frameGeo, frameMat); grp.add(frame);
     const mat = new THREE.MeshBasicMaterial({ color: 0x2a2a2e });
     const photo = new THREE.Mesh(photoGeo, mat);
-    photo.position.z = 0.045; photo.userData.itemId = it.id; photo.userData.index = idx;
+    photo.position.z = 0.045; photo.userData.itemId = it.id; photo.userData.index = items.indexOf(it);
     grp.add(photo); photoMeshes.push(photo);
     if (it.type === 'image'){
       texCount++;
@@ -1223,7 +1288,6 @@ function renderWalkthrough(g, items){
       cam: grp.position.clone().add(normal.clone().multiplyScalar(3.1)).setY(EYE),
       look: grp.position.clone(),
     });
-    idx++;
   };
   outer:
   for (const seg of wallSegs){
@@ -1238,6 +1302,12 @@ function renderWalkthrough(g, items){
       const lx = -(perSide - 1) * SPACING / 2 + k * SPACING;
       const lz = side * (SEG_T / 2 + 0.06);
       hangOne(seg.cx + lx * cosR + lz * sinR, seg.cz - lx * sinR + lz * cosR, ry + (side > 0 ? 0 : Math.PI));
+    }
+  }
+  if (useCustom && state.space.hung){
+    for (const h of state.space.hung){
+      const it = items.find(i => i.id === h.id);
+      if (it) hangOne(h.x, h.z, h.ry, it);
     }
   }
   if (texCount === 0 && loadingEl) loadingEl.remove();
@@ -1281,6 +1351,37 @@ function renderWalkthrough(g, items){
       mkTrim(hallW - 0.3, 0, -hd + 0.2, 0); mkTrim(hallW - 0.3, 0, hd - 0.2, 0);
       mkTrim(hallD - 0.3, -hw + 0.2, 0, Math.PI / 2); mkTrim(hallD - 0.3, hw - 0.2, 0, Math.PI / 2);
     }
+  }
+
+  /* ---------- 특수 건축: 궁전 · 성당 ---------- */
+  if (!useCustom && layout === 'palace'){
+    const plat = new THREE.Mesh(new THREE.BoxGeometry(20, 1, 12),
+      new THREE.MeshStandardMaterial({ color: 0xcfc8b8, roughness: .85 }));
+    plat.position.set(0, 0.5, -8); scene.add(plat);
+    colliders.push({ cx: 0, cz: -8, len: 20, wid: 12, ry: 0 });
+    const colGeoP = new THREE.CylinderGeometry(0.55, 0.62, HH, 12);
+    const colMatP = new THREE.MeshStandardMaterial({ color: 0x8a1f1f, roughness: .35 });
+    const capMatP = new THREE.MeshStandardMaterial({ color: 0xc9a227, roughness: .3, metalness: .6 });
+    const capGeoP = new THREE.BoxGeometry(1.7, 0.35, 1.7);
+    const putP = (x, z) => {
+      const c = new THREE.Mesh(colGeoP, colMatP); c.position.set(x, HH / 2, z); scene.add(c);
+      const cap = new THREE.Mesh(capGeoP, capMatP); cap.position.set(x, HH - 0.5, z); scene.add(cap);
+      colliders.push({ cx: x, cz: z, len: 1.7, wid: 1.7, ry: 0 });
+    };
+    for (let x = -14; x <= 14; x += 7){ putP(x, -16); putP(x, 0); }
+    for (let z = -16; z <= 0; z += 8){ putP(-17.5, z); putP(17.5, z); }
+  } else if (!useCustom && layout === 'cathedral'){
+    const colGeoC = new THREE.CylinderGeometry(0.7, 0.8, HH, 12);
+    const colMatC = new THREE.MeshStandardMaterial({ color: 0xb8b0a0, roughness: .8 });
+    const putC = (x, z) => {
+      const c = new THREE.Mesh(colGeoC, colMatC); c.position.set(x, HH / 2, z); scene.add(c);
+      colliders.push({ cx: x, cz: z, len: 2, wid: 2, ry: 0 });
+    };
+    for (let z = -30; z <= 30; z += 7.5){ putC(-6, z); putC(6, z); }
+    const altar = new THREE.Mesh(new THREE.BoxGeometry(10, 1.2, 6),
+      new THREE.MeshStandardMaterial({ color: 0xd8d2c4, roughness: .8 }));
+    altar.position.set(0, 0.6, -hallD / 2 + 6); scene.add(altar);
+    colliders.push({ cx: 0, cz: -hallD / 2 + 6, len: 10, wid: 6, ry: 0 });
   }
 
   // 입구 안내판 (전시 정보)
@@ -1394,7 +1495,7 @@ function renderWalkthrough(g, items){
       const c = Math.cos(ry), s = Math.sin(ry);
       const dx = p.x - b.cx, dz = p.z - b.cz;
       const lx = dx * c - dz * s, lz = dx * s + dz * c;
-      const hx = b.len / 2, hz = SEG_T / 2;
+      const hx = b.len / 2, hz = (b.wid || SEG_T) / 2;
       const nx = Math.max(-hx, Math.min(lx, hx));
       const nz = Math.max(-hz, Math.min(lz, hz));
       const ex = lx - nx, ez = lz - nz, d2 = ex*ex + ez*ez;
@@ -1405,14 +1506,69 @@ function renderWalkthrough(g, items){
         p.z = b.cz - wx * s + wz * c;
       }
     }
-    p.x = Math.max(-hw + 1, Math.min(hw - 1, p.x));
-    p.z = Math.max(-hd + 1, Math.min(hd - 1, p.z));
+    if (useCustom && customBounds){
+      p.x = Math.max(customBounds.x0, Math.min(customBounds.x1, p.x));
+      p.z = Math.max(customBounds.z0, Math.min(customBounds.z1, p.z));
+    } else {
+      p.x = Math.max(-hw + 1, Math.min(hw - 1, p.x));
+      p.z = Math.max(-hd + 1, Math.min(hd - 1, p.z));
+    }
   };
 
   const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
   const lookCard = $('#walkLook');
+  /* ---------- 벽에 걸기 모드 (커스텀 3D 공간) ---------- */
+  let hangMode = false;
+  const btnHang = $('#btnHang'), btnHangClear = $('#btnHangClear');
+  const hungCount = () => (state.space.hung || []).length;
+  const updateHangUI = () => {
+    const left = items.length - hungCount();
+    if (btnHang) btnHang.textContent = hangMode ? `✅ 걸기 중 (${left}점 남음)` : '🖼️ 벽에 걸기';
+    if (btnHangClear) btnHangClear.hidden = !hangMode;
+    el.style.cursor = hangMode ? 'crosshair' : '';
+  };
+  if (btnHang){
+    btnHang.hidden = !useCustom;
+    btnHang.addEventListener('click', () => {
+      hangMode = !hangMode; updateHangUI();
+      toast(hangMode ? '벽을 클릭하면 작품이 걸려요 (한 번에 최대 8점)' : '걸기 모드를 껐어요');
+    });
+  }
+  if (btnHangClear) btnHangClear.addEventListener('click', () => {
+    state.space.hung = []; hungIds.clear(); saveSpace(); renderGallery();
+    toast('걸린 액자를 모두 치웠어요');
+  });
+  const doHangClick = e => {
+    if (!customLoaded){ toast('공간 모델을 불러오는 중이에요'); return; }
+    const r = el.getBoundingClientRect();
+    ptr.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+    ptr.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+    ray.setFromCamera(ptr, camera);
+    const hit = ray.intersectObjects(customMeshes, false)[0];
+    if (!hit){ toast('벽을 클릭해주세요'); return; }
+    const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+    if (Math.abs(n.y) > 0.5){ toast('벽면을 클릭해주세요'); return; }
+    n.y = 0; n.normalize();
+    const ry = Math.atan2(n.x, n.z);
+    const dir = new THREE.Vector3(-n.z, 0, n.x);
+    const remaining = items.filter(it => !hungIds.has(it.id));
+    if (!remaining.length){ toast('걸 작품이 없어요'); hangMode = false; updateHangUI(); return; }
+    const perClick = Math.min(8, remaining.length);
+    const off0 = -(perClick - 1) * SPACING / 2;
+    for (let k = 0; k < perClick; k++){
+      const it = remaining[k];
+      const px = hit.point.x + dir.x * (off0 + k * SPACING) + n.x * 0.08;
+      const pz = hit.point.z + dir.z * (off0 + k * SPACING) + n.z * 0.08;
+      hangOne(px, pz, ry, it);
+      hungIds.add(it.id);
+      (state.space.hung = state.space.hung || []).push({ id: it.id, x: +px.toFixed(2), z: +pz.toFixed(2), ry: +ry.toFixed(3) });
+    }
+    saveSpace(); updateHangUI();
+    toast(`${perClick}점을 걸었어요 (남은 ${remaining.length - perClick}점)`);
+  };
   const onClick = e => {
     if (moved > 10) return;
+    if (hangMode && useCustom){ doHangClick(e); return; }
     const r = el.getBoundingClientRect();
     ptr.x = ((e.clientX - r.left) / r.width) * 2 - 1;
     ptr.y = -((e.clientY - r.top) / r.height) * 2 + 1;
@@ -1451,6 +1607,24 @@ function renderWalkthrough(g, items){
   const wdel = (w, h) => $(w).addEventListener('click', () => { $('#walkMenu').hidden = true; $(h).click(); });
   wdel('#btnWFolder', '#btnFolder'); wdel('#btnWFiles', '#btnFiles'); wdel('#btnWLink', '#btnLink');
   wdel('#btnWDemo', '#btnDemo'); wdel('#btnWAi', '#btnAi'); wdel('#btnWInfo', '#btnInfo'); wdel('#btnWCriteria', '#btnCriteria');
+  $('#btnWGlb').addEventListener('click', () => { $('#walkMenu').hidden = true; $('#glbFile').click(); });
+  $('#glbFile').addEventListener('change', e => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    if (typeof THREE.GLTFLoader === 'undefined'){ toast('3D 로더를 불러오지 못했어요'); return; }
+    const rd = new FileReader();
+    rd.onload = () => {
+      const dataUrl = rd.result;
+      try { localStorage.setItem('ex_glb_' + slug(state.config.title), dataUrl); }
+      catch(err){ try{ localStorage.removeItem('ex_glb_' + slug(state.config.title)); }catch(e2){} toast('모델이 커서 이번 세션에만 유지돼요'); }
+      glbCache[f.name] = dataUrl;
+      state.space.customGLB = { name: f.name };
+      state.space.hung = []; hungIdsClear();
+      saveSpace(); renderGallery();
+      toast(`'${f.name}' 공간을 불러왔어요. 🖼️ 벽에 걸기로 작품을 걸어보세요`);
+    };
+    rd.readAsDataURL(f);
+  });
   const syncFullBtn = () => {
     const b = $('#btnFull');
     if (b) b.textContent = document.fullscreenElement ? '🗗 전체화면 해제' : '⛶ 전체화면';
