@@ -294,6 +294,11 @@ function bindTopMenu(){
 
 /* ---------- 3D 공간 설정 ---------- */
 function openSpaceModal(){
+  const csn = $('#customSpaceName');
+  if (csn){
+    const cn = state.space.customGLB && state.space.customGLB.name;
+    csn.textContent = cn ? `3D 전시공간: ${cn}` : '기본 전시공간 (아래 액자 배치 중 선택)';
+  }
   const lay = $('#spaceLayouts');
   lay.innerHTML = Object.entries(LAYOUTS).map(([k, label]) =>
     `<button class="btn sm${k === (state.space.layout || 'serpentine') ? ' primary' : ''}" data-layout="${k}">${label}</button>`).join('');
@@ -500,7 +505,7 @@ function prettyTitle(name){
   return t || '무제';
 }
 function addItems(files){
-  let n = 0;
+  let n = 0, nm = 0;
   for (const f of files){
     const ext = extOf(f.name);
     const type = IMG_EXT.includes(ext) ? 'image' : VID_EXT.includes(ext) ? 'video' : MODEL_EXT.includes(ext) ? 'model' : null;
@@ -510,8 +515,9 @@ function addItems(files){
       name: f.name, title: prettyTitle(f.name),
       desc: '', url: URL.createObjectURL(f), type, source: 'folder',
     });
-    n++;
+    n++; if (type === 'model') nm++;
   }
+  addItems.nModel = nm;
   return n;
 }
 /* 가져오기 방식 선택: 기존에 추가 vs 다 지우고 새로 */
@@ -564,8 +570,9 @@ function onFilesChosen(e){
   applyImportMode(mode);
   const swapped = swapOutDemo();
   const n = addItems(files);
-  if (n){ renderAll(); toast(`${n}점을 전시실에 걸었어요${swapped ? ` · 데모 ${swapped}점을 교체했어요` : ''}`); }
-  else toast('사진·영상 파일이 없어요');
+  const nm = addItems.nModel || 0;
+  if (n){ renderAll(); toast(`${n}점을 전시품으로 추가했어요${nm ? ` (3D 모델 ${nm}점은 좌대에 전시)` : ''}${swapped ? ` · 데모 ${swapped}점을 교체했어요` : ''}`); }
+  else toast('사진·영상·3D 모델 파일이 없어요');
 }
 
 /* ---------- 갤러리 ---------- */
@@ -1011,7 +1018,7 @@ function renderWalkthrough(g, items){
       <button class="btn sm" id="btnWAi">🤖 AI 설명</button>
       <button class="btn sm" id="btnWInfo">🖋️ 전시 정보</button>
       <button class="btn sm" id="btnWCriteria">⚙️ 전시 기준</button>
-      <button class="btn sm" id="btnWGlb">🏛️ 3D 공간 가져오기</button>
+      <button class="btn sm" id="btnWGlb">🏛️ 3D 전시공간 가져오기</button>
     </div>
     <div class="walk-hint">${('ontouchstart' in window) ? '드래그: 둘러보기 · 조이스틱: 이동 · 작품 터치: 크게 보기' : '드래그: 시점 회전 · W A S D: 이동 · 작품 클릭: 크게 보기'}</div>
     <div class="walk-loading" id="walkLoading">
@@ -1694,7 +1701,7 @@ function renderWalkthrough(g, items){
       state.space.customGLB = { name: f.name };
       state.space.hung = []; hungIdsClear();
       saveSpace(); renderGallery();
-      toast(`'${f.name}' 공간을 불러왔어요. 🖼️ 벽에 걸기로 작품을 걸어보세요`);
+      toast(`3D 전시공간 '${f.name}'을 불러왔어요. 🖼️ 벽에 걸기로 작품을 걸어보세요`);
     };
     rd.readAsDataURL(f);
   });
@@ -2101,20 +2108,8 @@ function setupDrop(){
 }
 
 /* ---------- 초기화 ---------- */
-let fsAutoDone = false;
-function armAutoFullscreen(){
-  document.addEventListener('pointerdown', () => {
-    if (fsAutoDone || !state.items.length || document.fullscreenElement) return;
-    fsAutoDone = true;
-    try{
-      const p = document.documentElement.requestFullscreen();
-      if (p && p.catch) p.catch(() => {});
-    }catch(e){}
-  });
-}
 function init(){
   bindTopMenu();
-  armAutoFullscreen();
   loadConfig().then(() => {
     loadItems();
     // 전시 제목 인라인 편집
