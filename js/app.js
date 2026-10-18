@@ -3,6 +3,7 @@
 
 const IMG_EXT = ['jpg','jpeg','png','webp','gif','bmp'];
 const VID_EXT = ['mp4','webm','mov','m4v'];
+const MODEL_EXT = ['glb'];
 
 const state = {
   config: { title:'사진전시관', subtitle:'사진작가를 위한 3D 전시 공간', accent:'#c9a227', accent2:'#e8c874', artist:'MetaSongi', year:'2026', bio:'', contact:'' },
@@ -383,18 +384,32 @@ function blobToDataURL(blobUrl, maxDim, quality){
     img.src = URL.createObjectURL(blob);
   }));
 }
+function blobToRawDataURL(blobUrl){
+  return fetch(blobUrl).then(r => { if (!r.ok) throw 0; return r.blob(); }).then(blob => new Promise((res, rej) => {
+    if (blob.size > 25 * 1048576){ rej('too-big'); return; }
+    const fr = new FileReader();
+    fr.onload = () => res(fr.result);
+    fr.onerror = rej;
+    fr.readAsDataURL(blob);
+  }));
+}
 async function exportExhibition(){
   const c = state.config;
   toast('공유용 전시 파일 만드는 중...');
   const items = [];
-  let embedded = 0, skippedVideo = 0, failed = 0;
+  let embedded = 0, embeddedModel = 0, skippedVideo = 0, skippedBig = 0, failed = 0;
   for (const it of state.items){
     const url = it.url || '';
     let out = url;
     if (url.startsWith('blob:')){
       if (it.type === 'video'){ skippedVideo++; continue; }
-      try{ out = await blobToDataURL(url, 1600, 0.85); embedded++; }
-      catch(e){ failed++; continue; }
+      if (it.type === 'model'){
+        try{ out = await blobToRawDataURL(url); embeddedModel++; }
+        catch(e){ e === 'too-big' ? skippedBig++ : failed++; continue; }
+      } else {
+        try{ out = await blobToDataURL(url, 1600, 0.85); embedded++; }
+        catch(e){ failed++; continue; }
+      }
     }
     items.push({ name: it.name, title: it.title, desc: it.desc, url: out, type: it.type, source: it.source });
   }
@@ -412,7 +427,7 @@ async function exportExhibition(){
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   const mb = (json.length / 1048576).toFixed(1);
-  toast(`전시 파일로 내보냈어요 (${items.length}점${embedded ? `, 직접 올린 ${embedded}점 포함` : ''}${skippedVideo ? `, 동영상 ${skippedVideo}점 제외` : ''}${failed ? `, 실패 ${failed}점 제외` : ''}, ${mb}MB)`);
+  toast(`전시 파일로 내보냈어요 (${items.length}점${embedded ? `, 직접 올린 ${embedded}점 포함` : ''}${embeddedModel ? `, 3D 모델 ${embeddedModel}점 포함` : ''}${skippedVideo ? `, 동영상 ${skippedVideo}점 제외` : ''}${skippedBig ? `, 25MB 초과 모델 ${skippedBig}점 제외` : ''}${failed ? `, 실패 ${failed}점 제외` : ''}, ${mb}MB)`);
 }
 function importExhibition(file){
   const r = new FileReader();
@@ -432,7 +447,7 @@ function importExhibition(file){
       if (data.criteria && data.criteria.max >= data.criteria.min) state.criteria = data.criteria;
       state.items = data.items.filter(it => it && it.url).map(it => ({
         id: 'w' + (++state.seq), name: it.name || '', title: it.title || prettyTitle(it.name),
-        desc: it.desc || '', url: it.url, type: it.type === 'video' ? 'video' : 'image', source: it.source || 'import',
+        desc: it.desc || '', url: it.url, type: it.type === 'video' ? 'video' : it.type === 'model' ? 'model' : 'image', source: it.source || 'import',
       }));
       $('#infoModal').hidden = true;
       renderAll();
@@ -458,9 +473,9 @@ function renderEditList(q){
     const thumb = it.type === 'image'
       ? (it.source === 'drive' ? String(it.url).replace('sz=w1920', 'sz=w200') : it.url) : '';
     return `<div class="edit-row">
-      ${thumb ? `<img src="${esc(thumb)}" alt="" loading="lazy">` : `<div class="edit-vid">▶</div>`}
+      ${thumb ? `<img src="${esc(thumb)}" alt="" loading="lazy">` : `<div class="edit-vid">${it.type === 'model' ? '📦' : '▶'}</div>`}
       <div class="edit-fields">
-        <div class="edit-no">No.${i + 1}${it.type === 'video' ? ' · 영상' : ''}</div>
+        <div class="edit-no">No.${i + 1}${it.type === 'video' ? ' · 영상' : it.type === 'model' ? ' · 3D 모델' : ''}</div>
         <input class="textin et" data-id="${it.id}" data-f="title" value="${esc(it.title)}" placeholder="제목">
         <input class="textin ed" data-id="${it.id}" data-f="desc" value="${esc(it.desc)}" placeholder="설명">
       </div>
@@ -488,7 +503,7 @@ function addItems(files){
   let n = 0;
   for (const f of files){
     const ext = extOf(f.name);
-    const type = IMG_EXT.includes(ext) ? 'image' : VID_EXT.includes(ext) ? 'video' : null;
+    const type = IMG_EXT.includes(ext) ? 'image' : VID_EXT.includes(ext) ? 'video' : MODEL_EXT.includes(ext) ? 'model' : null;
     if (!type) continue;
     state.items.push({
       id: 'w' + (++state.seq),
@@ -584,6 +599,7 @@ function renderWhiteCube(g, items){
       <div class="frame"><div class="inner">
         ${it.type === 'image'
           ? `<img src="${esc(it.url)}" alt="${esc(it.title)}" loading="lazy">`
+          : it.type === 'model' ? modelBadgeHTML(it)
           : `<video src="${esc(it.url)}" muted loop playsinline preload="metadata"></video>`}
       </div></div>
       <div class="plate">
@@ -609,6 +625,7 @@ function renderDarkroom(g, items){
     <article class="dwork" data-id="${it.id}">
       ${it.type === 'image'
         ? `<img src="${esc(it.url)}" alt="${esc(it.title)}" loading="lazy">`
+        : it.type === 'model' ? modelBadgeHTML(it)
         : `<video src="${esc(it.url)}" muted loop playsinline preload="metadata"></video>`}
       <div class="dcap"><h3>${esc(it.title)}</h3><p>${esc(metaLine())}</p></div>
     </article>`).join('');
@@ -625,7 +642,7 @@ function renderMagazine(g, items){
   const rows = rest.map((it, i) => `
     <div class="mag-row">
       <div class="mag-img">
-        <img src="${esc(it.url)}" alt="${esc(it.title)}" loading="lazy">
+        ${it.type === 'model' ? modelBadgeHTML(it) : `<img src="${esc(it.url)}" alt="${esc(it.title)}" loading="lazy">`}
         <div class="cap">FIG. ${num2(i+2)} — ${esc(it.title)}</div>
       </div>
       <div class="mag-text">
@@ -638,8 +655,11 @@ function renderMagazine(g, items){
   g.querySelector('.mag-cover')?.addEventListener('click', () => openLightbox(cover.id));
   g.querySelectorAll('.mag-img img').forEach((img, i) =>
     img.addEventListener('click', () => openLightbox(rest[i].id)));
+  g.querySelectorAll('.mag-img .model-badge').forEach(el =>
+    el.addEventListener('click', () => openLightbox(el.dataset.mid)));
   g.querySelectorAll('.mag-img img,.mag-cover img').forEach(el => el.style.cursor = 'pointer');
 }
+const modelBadgeHTML = it => `<div class="model-badge" data-mid="${esc(it.id)}" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:180px;background:#17171c;border:1px solid #2c2c34;cursor:pointer"><span style="font-size:44px">📦</span><span style="font-size:12px;color:#8a8478;letter-spacing:2px">3D 모델</span><span style="font-size:13px;color:#e8e4da">${esc(it.title)}</span></div>`;
 /* --- 벤토 그리드 --- */
 const BENTO_PAT = [[2,2],[1,1],[1,1],[1,2],[1,1],[2,1],[1,1],[1,1],[2,2],[1,1],[1,2],[2,1]];
 function renderBento(g, items){
@@ -647,6 +667,7 @@ function renderBento(g, items){
     const [c, r] = BENTO_PAT[i % BENTO_PAT.length];
     const media = it.type === 'image'
       ? `<img src="${esc(it.url)}" alt="${esc(it.title)}" loading="lazy">`
+      : it.type === 'model' ? modelBadgeHTML(it)
       : `<video src="${esc(it.url)}" muted playsinline preload="metadata"></video>`;
     return `<div class="bento-item" data-id="${it.id}" style="grid-column:span ${c};grid-row:span ${r}">
       ${media}
@@ -661,6 +682,7 @@ function renderHScroll(g, items){
     <div class="hcard" data-id="${it.id}">
       ${it.type === 'image'
         ? `<img src="${esc(it.url)}" alt="${esc(it.title)}" loading="lazy">`
+        : it.type === 'model' ? modelBadgeHTML(it)
         : `<video src="${esc(it.url)}" muted loop playsinline preload="metadata"></video>`}
       <div class="hcap"><span>${num2(i+1)}</span>${esc(it.title)}</div>
     </div>`).join('');
@@ -675,7 +697,7 @@ function renderHScroll(g, items){
 function renderMarquee(g, items){
   const card = it => `
     <div class="mq-item" data-id="${it.id}">
-      <img src="${esc(it.url)}" alt="${esc(it.title)}" loading="lazy" draggable="false">
+      ${it.type === 'model' ? modelBadgeHTML(it) : `<img src="${esc(it.url)}" alt="${esc(it.title)}" loading="lazy" draggable="false">`}
       <div class="bcap">${esc(it.title)}</div>
     </div>`;
   const half = items.map(card).join('');
@@ -696,6 +718,7 @@ function renderCarousel(g, items){
     d.className = 'car-item'; d.dataset.id = it.id;
     d.innerHTML = `${it.type === 'image'
       ? `<img src="${esc(it.url)}" alt="${esc(it.title)}" draggable="false">`
+      : it.type === 'model' ? modelBadgeHTML(it)
       : `<video src="${esc(it.url)}" muted playsinline preload="metadata"></video>`}
       <div class="ccap">${esc(it.title)}</div>`;
     stage.appendChild(d);
@@ -752,6 +775,7 @@ function renderPolaroid(g, items){
     <figure class="pol" data-id="${it.id}" style="--r:${((i * 37) % 11) - 5}deg">
       ${it.type === 'image'
         ? `<img src="${esc(it.url)}" alt="${esc(it.title)}" loading="lazy">`
+        : it.type === 'model' ? modelBadgeHTML(it)
         : `<video src="${esc(it.url)}" muted playsinline preload="metadata"></video>`}
       <figcaption>${esc(it.title)}</figcaption>
     </figure>`).join('');
@@ -1242,9 +1266,58 @@ function renderWalkthrough(g, items){
   let idx = 0;
   const hungIds = new Set((state.space.hung || []).map(h => h.id));
   hungIdsClear = () => hungIds.clear();
+  const pedGeo = new THREE.CylinderGeometry(0.55, 0.68, 1.0, 20);
+  const pedMat = new THREE.MeshStandardMaterial({ color: 0x3a3a40, roughness: .6 });
+  const hangModel = (x, z, ry, it) => {
+    const normal = new THREE.Vector3(Math.sin(ry), 0, Math.cos(ry));
+    const px = x + normal.x * 1.5, pz = z + normal.z * 1.5;
+    const ped = new THREE.Mesh(pedGeo, pedMat);
+    ped.position.set(px, 0.5, pz); scene.add(ped);
+    colliders.push({ cx: px, cz: pz, len: 1.5, wid: 1.5, ry: 0 });
+    const grp = new THREE.Group();
+    grp.position.set(px, 1.0, pz); grp.rotation.y = ry;
+    scene.add(grp);
+    if (typeof THREE.GLTFLoader !== 'undefined'){
+      new THREE.GLTFLoader().load(it.url, gltf => {
+        const m = gltf.scene;
+        const bb = new THREE.Box3().setFromObject(m);
+        const sz = bb.getSize(new THREE.Vector3());
+        const s = Math.max(sz.x, sz.y, sz.z) > 0 ? 1.25 / Math.max(sz.x, sz.y, sz.z) : 1;
+        m.scale.setScalar(s);
+        m.updateMatrixWorld(true);
+        const b2 = new THREE.Box3().setFromObject(m);
+        m.position.y -= b2.min.y;
+        grp.add(m);
+        m.traverse(o => {
+          if (o.isMesh){ o.userData.itemId = it.id; o.userData.index = items.indexOf(it); photoMeshes.push(o); }
+        });
+      }, undefined, () => {});
+    }
+    // 캡션 플레이트 (좌대 앞면)
+    const cv = document.createElement('canvas'); cv.width = 512; cv.height = 112;
+    const c2 = cv.getContext('2d');
+    c2.fillStyle = '#f5f2ea'; c2.fillRect(0, 0, 512, 112);
+    c2.fillStyle = state.config.accent; c2.fillRect(0, 0, 512, 10);
+    c2.fillStyle = '#1c1a16'; c2.font = '600 40px "Noto Serif KR", serif';
+    c2.fillText((it.title || '무제').slice(0, 14), 28, 62);
+    c2.fillStyle = '#8a8478'; c2.font = '26px sans-serif';
+    c2.fillText(`${state.config.artist} · 3D 모델`, 28, 94);
+    const plateTex = new THREE.CanvasTexture(cv); plateTex.colorSpace = THREE.SRGBColorSpace;
+    const plate = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.62, 0.135),
+      new THREE.MeshBasicMaterial({ map: plateTex }));
+    plate.position.set(px + normal.x * 0.62, 0.62, pz + normal.z * 0.62);
+    plate.rotation.y = ry;
+    scene.add(plate);
+    waypoints.push({
+      cam: new THREE.Vector3(px + normal.x * 3.2, EYE, pz + normal.z * 3.2),
+      look: new THREE.Vector3(px, 1.6, pz),
+    });
+  };
   const hangOne = (x, z, ry, item) => {
     const it = item || items[idx++];
     if (!it) return;
+    if (it.type === 'model'){ hangModel(x, z, ry, it); return; }
     const grp = new THREE.Group();
     grp.position.set(x, ART_Y, z);
     grp.rotation.y = ry;
@@ -1742,19 +1815,68 @@ function openLightbox(id){
   $('#lightbox').hidden = false;
   document.body.style.overflow = 'hidden';
 }
+let lbViewer = null;
+function disposeLbViewer(){
+  if (lbViewer){
+    try{
+      cancelAnimationFrame(lbViewer.raf);
+      lbViewer.renderer.dispose();
+      lbViewer.el.remove();
+    }catch(e){}
+    lbViewer = null;
+  }
+}
+function renderModelViewer(it){
+  disposeLbViewer();
+  const box = $('#lbMedia');
+  box.innerHTML = '<div id="lbModel" style="width:100%;height:60vh;min-height:320px;cursor:grab"></div><div style="text-align:center;color:var(--muted);font-size:12px;padding:6px">드래그: 회전 · 휠: 확대/축소</div>';
+  const el = $('#lbModel');
+  const W = el.clientWidth || 800, H = el.clientHeight || 480;
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(W, H); renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  el.appendChild(renderer.domElement);
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x141416);
+  const camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 100);
+  camera.position.set(2.6, 1.8, 3.2);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x333340, 1.1));
+  const dl = new THREE.DirectionalLight(0xffffff, 1.2); dl.position.set(4, 6, 3); scene.add(dl);
+  const ctl = new THREE.OrbitControls(camera, renderer.domElement);
+  ctl.enableDamping = true; ctl.autoRotate = true; ctl.autoRotateSpeed = 1.2;
+  ctl.target.set(0, 0.8, 0);
+  new THREE.GLTFLoader().load(it.url, gltf => {
+    const m = gltf.scene;
+    const bb = new THREE.Box3().setFromObject(m);
+    const sz = bb.getSize(new THREE.Vector3());
+    const s = Math.max(sz.x, sz.y, sz.z) > 0 ? 1.8 / Math.max(sz.x, sz.y, sz.z) : 1;
+    m.scale.setScalar(s);
+    m.updateMatrixWorld(true);
+    const b2 = new THREE.Box3().setFromObject(m);
+    m.position.y -= b2.min.y;
+    scene.add(m);
+  }, undefined, () => { el.innerHTML = '<div style="color:#888;padding:40px;text-align:center">3D 모델을 불러오지 못했어요</div>'; });
+  const v = { renderer, el, raf: 0 };
+  const tick = () => { v.raf = requestAnimationFrame(tick); ctl.update(); renderer.render(scene, camera); };
+  tick();
+  lbViewer = v;
+}
 function renderLb(){
   const it = lb.list[lb.idx];
   if (!it){ closeLightbox(); return; }
-  $('#lbMedia').innerHTML = it.type === 'image'
+  disposeLbViewer();
+  if (it.type === 'model'){ renderModelViewer(it); }
+  else $('#lbMedia').innerHTML = it.type === 'image'
     ? `<img src="${esc(it.url)}" alt="${esc(it.title)}">`
     : `<video src="${esc(it.url)}" controls autoplay playsinline></video>`;
   $('#lbTitle').textContent = it.title;
   $('#lbTitle').dataset.id = it.id;
-  $('#lbMeta').textContent = `${metaLine()} · No.${num2(lb.idx+1)}${it.type==='video'?' · 영상':''}`;
+  $('#lbMeta').textContent = `${metaLine()} · No.${num2(lb.idx+1)}${it.type==='video'?' · 영상':it.type==='model'?' · 3D 모델':''}`;
   $('#lbDesc').textContent = it.desc || '';
   $('#lbDesc').dataset.id = it.id;
 }
 function closeLightbox(){
+  disposeLbViewer();
   $('#lightbox').hidden = true; $('#lbMedia').innerHTML = '';
   document.body.style.overflow = '';
 }
@@ -1783,6 +1905,12 @@ function playPjItem(){
     img.src = it.url; img.alt = it.title;
     st.appendChild(img);
     pj.timer = setTimeout(() => pjNav(1), 5200);
+  } else if (it.type === 'model'){
+    const d = document.createElement('div');
+    d.innerHTML = `<div style="font-size:64px">📦</div><div style="color:#8a8478;margin-top:12px">3D 모델 — 전시장에서 감상하세요</div>`;
+    d.style.cssText = 'text-align:center;padding:60px';
+    st.appendChild(d);
+    pj.timer = setTimeout(() => pjNav(1), 3000);
   } else {
     const v = document.createElement('video');
     v.src = it.url; v.controls = true; v.autoplay = true;
@@ -1820,6 +1948,7 @@ function linkToItem(url){
   const name = (() => { try { return decodeURIComponent(clean.split('/').pop()) || 'link'; } catch(e){ return 'link'; } })();
   if (/\.(jpe?g|png|webp|gif|bmp)$/i.test(clean)) return { url, name, type: 'image' };
   if (/\.(mp4|webm|mov|m4v)$/i.test(clean)) return { url, name, type: 'video' };
+  if (/\.glb$/i.test(clean)) return { url, name, type: 'model' };
   return null;
 }
 function addLinkItems(text){
