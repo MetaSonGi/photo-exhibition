@@ -154,7 +154,7 @@ body.dark .styleswitch button.active{background:var(--accent);border-color:var(-
   .walk-ui{flex-wrap:wrap;max-width:calc(100vw - 28px);gap:6px}
   .walk-ui .btn{font-size:12px;padding:7px 10px}
   .walk-menu{top:104px;min-width:160px}
-  .walk-hint{font-size:11px;padding:6px 12px;max-width:94vw;white-space:normal;text-align:center;line-height:1.5}
+  .walk-hint{font-size:11px;padding:6px 12px;white-space:normal;text-align:center;line-height:1.5;left:124px;right:12px;transform:none;max-width:none}
   .walk-joy{width:96px;height:96px;left:14px;bottom:14px}
   .walk-lookcard{bottom:126px;padding:8px 14px}
   .lb-figure{flex-direction:column;gap:16px;max-height:92vh;overflow-y:auto}
