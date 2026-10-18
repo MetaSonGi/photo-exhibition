@@ -361,23 +361,55 @@ function saveInfoModal(){
   renderGallery();
   toast('전시 정보를 저장했어요');
 }
-function exportExhibition(){
+/* blob: 사진을 공유 가능한 dataURL(JPEG 리사이즈)로 변환 */
+function blobToDataURL(blobUrl, maxDim, quality){
+  return fetch(blobUrl).then(r => { if (!r.ok) throw 0; return r.blob(); }).then(blob => new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      try{
+        let w = img.naturalWidth, h = img.naturalHeight;
+        const s = Math.min(1, maxDim / Math.max(w, h));
+        w = Math.max(1, Math.round(w * s)); h = Math.max(1, Math.round(h * s));
+        const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+        cv.getContext('2d').drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(img.src);
+        res(cv.toDataURL('image/jpeg', quality));
+      }catch(e){ rej(e); }
+    };
+    img.onerror = rej;
+    img.src = URL.createObjectURL(blob);
+  }));
+}
+async function exportExhibition(){
   const c = state.config;
-  const items = state.items.filter(it => !(it.url || '').startsWith('blob:'));
-  const dropped = state.items.length - items.length;
+  toast('공유용 전시 파일 만드는 중...');
+  const items = [];
+  let embedded = 0, skippedVideo = 0, failed = 0;
+  for (const it of state.items){
+    const url = it.url || '';
+    let out = url;
+    if (url.startsWith('blob:')){
+      if (it.type === 'video'){ skippedVideo++; continue; }
+      try{ out = await blobToDataURL(url, 1600, 0.85); embedded++; }
+      catch(e){ failed++; continue; }
+    }
+    items.push({ name: it.name, title: it.title, desc: it.desc, url: out, type: it.type, source: it.source });
+  }
   const data = {
     app: 'photo-exhibition', version: 1, exportedAt: new Date().toISOString(),
     config: { title: $('#exTitle').textContent.trim(), subtitle: c.subtitle, artist: c.artist, bio: c.bio, contact: c.contact, year: c.year },
     criteria: state.criteria,
-    items: items.map(it => ({ name: it.name, title: it.title, desc: it.desc, url: it.url, type: it.type, source: it.source })),
+    items,
   };
-  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  const json = JSON.stringify(data);
+  const blob = new Blob([json], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `전시_${($('#exTitle').textContent.trim() || 'photo').replace(/\s+/g, '_')}.json`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  toast(`전시 파일로 내보냈어요 (${items.length}점${dropped ? `, 직접 올린 ${dropped}점 제외` : ''})`);
+  const mb = (json.length / 1048576).toFixed(1);
+  toast(`전시 파일로 내보냈어요 (${items.length}점${embedded ? `, 직접 올린 ${embedded}점 포함` : ''}${skippedVideo ? `, 동영상 ${skippedVideo}점 제외` : ''}${failed ? `, 실패 ${failed}점 제외` : ''}, ${mb}MB)`);
 }
 function importExhibition(file){
   const r = new FileReader();
