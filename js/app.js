@@ -1004,6 +1004,7 @@ function renderWalkthrough(g, items){
       <button class="btn sm" id="btnEdit">📝 작품 편집</button>
       <button class="btn sm" id="btnWalkHelp">❔ 조작법</button>
       <button class="btn sm" id="btnFull">⛶ 전체화면</button>
+      <button class="btn sm" id="btnVR">🥽 VR</button>
       <button class="btn sm" id="btnViewReset" title="시점을 입구로 되돌리기">⌂ 시점</button>
       <button class="btn sm" id="btnWalkMenu" title="가져오기·설정 메뉴">☰</button>
       <button class="btn sm" id="btnHang" hidden>🖼️ 벽에 걸기</button>
@@ -1723,6 +1724,49 @@ function renderWalkthrough(g, items){
   document.addEventListener('fullscreenchange', syncFullBtn);
   syncFullBtn();
 
+  /* ---------- WebXR VR 모드 ---------- */
+  // VR 중에는 헤드셋이 시점을 담당하므로 camera.lookAt을 건드리지 않고,
+  // 이동만 헤드셋 방향 + 컨트롤러 스틱으로 처리한다.
+  let vrSession = null, vrActive = false, useXRLoop = false;
+  const setVRButton = () => {
+    const b = $('#btnVR');
+    if (b) b.textContent = vrActive ? '🥽 VR 종료' : '🥽 VR';
+  };
+  const onVRSessionEnd = () => {
+    vrActive = false; vrSession = null;
+    renderer.setAnimationLoop(null); useXRLoop = false;
+    camera.position.y = EYE;
+    setVRButton();
+    if (alive) raf = requestAnimationFrame(animate);
+  };
+  const startVR = async () => {
+    let session = null;
+    try {
+      if (!navigator.xr){ toast('이 브라우저는 WebXR을 지원하지 않아요'); return; }
+      if (document.fullscreenElement){ try { await document.exitFullscreen(); } catch(e){} }
+      const ok = await navigator.xr.isSessionSupported('immersive-vr');
+      if (!ok){ toast('WebXR VR을 지원하는 기기가 필요해요 (VR 헤드셋 등)'); return; }
+      renderer.xr.enabled = true;
+      session = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor'] });
+      vrSession = session; vrActive = true;
+      camera.position.y = 0; // 헤드셋 높이를 그대로 사용 (바닥 기준)
+      session.addEventListener('end', onVRSessionEnd);
+      await renderer.xr.setSession(session);
+      cancelAnimationFrame(raf); useXRLoop = true;
+      renderer.setAnimationLoop(animate);
+      setVRButton();
+    } catch(err){
+      vrActive = false; vrSession = null;
+      if (session){ try { await session.end(); } catch(e2){} }
+      toast('VR을 시작하지 못했어요');
+    }
+  };
+  $('#btnVR').addEventListener('click', e => {
+    e.stopPropagation();
+    if (vrActive && vrSession){ try { vrSession.end(); } catch(err){} }
+    else startVR();
+  });
+
   const fwd = new THREE.Vector3(), rgt = new THREE.Vector3(), cdir = new THREE.Vector3();
   let raf = 0, alive = true, last = performance.now(), frame = 0;
   const animate = now => {
@@ -1743,6 +1787,31 @@ function renderWalkthrough(g, items){
       }
       const d = new THREE.Vector3().subVectors(lookTarget, camera.position);
       yaw = Math.atan2(-d.x, -d.z); pitch = Math.atan2(d.y, Math.hypot(d.x, d.z));
+    } else if (vrActive && renderer.xr.isPresenting) {
+      // VR: 헤드셋 방향으로 이동, 시점·높이는 헤드셋이 담당
+      camera.getWorldDirection(cdir);
+      fwd.set(cdir.x, 0, cdir.z);
+      if (fwd.lengthSq() > 1e-6) fwd.normalize(); else fwd.set(0, 0, -1);
+      rgt.set(-fwd.z, 0, fwd.x);
+      const sp = 3.6 * dt * state.space.speed;
+      let mx = 0, mz = 0;
+      if (vrSession){
+        for (const src of vrSession.inputSources){
+          if (src.gamepad && src.gamepad.axes && src.gamepad.axes.length >= 4){
+            mx = src.gamepad.axes[2]; mz = src.gamepad.axes[3]; break;
+          }
+        }
+      }
+      if (Math.abs(mx) > 0.15) camera.position.addScaledVector(rgt, mx * sp);
+      if (Math.abs(mz) > 0.15) camera.position.addScaledVector(fwd, -mz * sp);
+      if (keys['w'] || keys['arrowup']) camera.position.addScaledVector(fwd, sp);
+      if (keys['s'] || keys['arrowdown']) camera.position.addScaledVector(fwd, -sp);
+      if (keys['a'] || keys['arrowleft']) camera.position.addScaledVector(rgt, -sp);
+      if (keys['d'] || keys['arrowright']) camera.position.addScaledVector(rgt, sp);
+      if (joyVec){
+        camera.position.addScaledVector(fwd, -joyVec.y * sp).addScaledVector(rgt, joyVec.x * sp);
+      }
+      collide(camera.position);
     } else {
       const sp = 3.6 * dt * state.space.speed;
       fwd.set(-Math.sin(yaw), 0, -Math.cos(yaw));
@@ -1759,7 +1828,7 @@ function renderWalkthrough(g, items){
       lookTarget.copy(camera.position).add(new THREE.Vector3(
         -Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)));
     }
-    camera.lookAt(lookTarget);
+    if (!(vrActive && renderer.xr.isPresenting)) camera.lookAt(lookTarget);
     walkView.x = camera.position.x; walkView.z = camera.position.z;
     walkView.yaw = yaw; walkView.pitch = pitch; walkView.valid = true;
     // 바라보는 작품 정보 카드
@@ -1776,7 +1845,7 @@ function renderWalkthrough(g, items){
     } else if (lookCard && tour.on) lookCard.hidden = true;
     ambienceUpdate(camera, yaw, pitch);
     renderer.render(scene, camera);
-    raf = requestAnimationFrame(animate);
+    if (!useXRLoop) raf = requestAnimationFrame(animate);
   };
   animate(last);
 
@@ -1792,6 +1861,8 @@ function renderWalkthrough(g, items){
 
   walkCleanup = () => {
     alive = false; cancelAnimationFrame(raf);
+    renderer.setAnimationLoop(null);
+    if (vrSession){ try { vrSession.end(); } catch(e){} vrSession = null; vrActive = false; }
     if (amb.ctx) amb.ctx.suspend().catch(() => {});
     el.removeEventListener('pointerdown', pDown);
     window.removeEventListener('pointermove', pMove);
