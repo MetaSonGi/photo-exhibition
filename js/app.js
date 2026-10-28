@@ -1026,7 +1026,11 @@ function renderWalkthrough(g, items){
       <div class="walk-loading-bar"><div id="walkBar"></div></div>
     </div>
     <div class="walk-lookcard" id="walkLook" hidden></div>`;
-  const W = g.clientWidth, H = Math.max(480, Math.min(1100, Math.round(window.innerHeight - 170)));
+  // 전체화면 상태에서도 초기 높이를 onResize와 동일하게 계산해야 함
+  // (편집 모달 닫기·설정 변경 시 renderGallery가 3D 뷰를 재생성하는데,
+  //  여기서 전체화면을 무시하면 캔버스가 innerHeight-170으로 줄어든 채 남음)
+  const W = g.clientWidth, H = document.fullscreenElement ? window.innerHeight
+    : Math.max(480, Math.min(1100, Math.round(window.innerHeight - 170)));
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(theme.bg);
   scene.fog = new THREE.Fog(theme.bg, 25, 210);
