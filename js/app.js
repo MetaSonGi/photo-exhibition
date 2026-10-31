@@ -259,9 +259,16 @@ async function loadConfig(){
   }catch(e){}
   try{
     const sp = JSON.parse(localStorage.getItem('ex_space_' + slug(c.title)) || 'null');
-    if (sp){ if (sp.light > 0) state.space.light = sp.light; if (sp.speed > 0) state.space.speed = sp.speed; }
+    if (sp){
+      if (sp.light > 0) state.space.light = sp.light;
+      if (sp.speed > 0) state.space.speed = sp.speed;
+      if (sp.layout && LAYOUTS[sp.layout]) state.space.layout = sp.layout;
+      if (sp.place && typeof sp.place === 'object') state.space.place = sp.place;
+      if (Array.isArray(sp.hung)) state.space.hung = sp.hung;
+      if (sp.customGLB && sp.customGLB.name) state.space.customGLB = { name: sp.customGLB.name };
+    }
     const au = JSON.parse(localStorage.getItem('ex_amb_' + slug(c.title)) || 'null');
-    if (au){ if (typeof au.on === 'boolean') amb.on = au.on; if (au.vol >= 0) amb.vol = au.vol; if (typeof au.chime === 'boolean') amb.chime = au.chime; if (typeof au.mode === 'string') amb.mode = au.mode; }
+    if (au){ if (typeof au.on === 'boolean') amb.on = au.on; if (au.vol >= 0) amb.vol = au.vol; if (typeof au.chime === 'boolean') amb.chime = au.chime; if (typeof au.mode === 'string') amb.mode = au.mode; if (typeof au.frame === 'boolean') amb.frame = au.frame; }
   }catch(e){}
 }
 function saveExConfig(){
@@ -274,7 +281,7 @@ function saveExConfig(){
 function saveSpace(){
   try{
     localStorage.setItem('ex_space_' + slug(state.config.title), JSON.stringify(state.space));
-    localStorage.setItem('ex_amb_' + slug(state.config.title), JSON.stringify({ on: amb.on, vol: amb.vol, chime: amb.chime, mode: amb.mode }));
+    localStorage.setItem('ex_amb_' + slug(state.config.title), JSON.stringify({ on: amb.on, vol: amb.vol, chime: amb.chime, mode: amb.mode, frame: amb.frame }));
   }catch(e){}
 }
 
@@ -306,6 +313,7 @@ function openSpaceModal(){
     b.onclick = () => {
       state.space.layout = b.dataset.layout;
       state.space.customGLB = null; state.space.hung = [];
+      walkView.valid = false; // 새 배치의 입구에서 시작 (이전 배치 좌표는 의미 없음)
       saveSpace(); openSpaceModal(); renderGallery();
       toast(`'${LAYOUTS[b.dataset.layout]}' 배치로 바꿨어요`);
     };
@@ -343,6 +351,8 @@ function syncAmbUI(){
   $('#setAmbVol').value = amb.vol;
   $('#setAmbVolV').textContent = amb.vol + '%';
   $('#setChimeToggle').textContent = amb.chime ? '🔔 켜짐' : '🔕 꺼짐';
+  const fb = $('#setFrameSndToggle'); if (fb) fb.textContent = amb.frame ? '🎵 켜짐' : '🔇 꺼짐';
+  const wb = $('#btnFrameSnd'); if (wb) wb.textContent = `${amb.frame ? '🎵' : '🔇'} 작품 사운드`;
 }
 
 /* ---------- 전시 정보 (작가 프로필 + 공유) ---------- */
@@ -416,12 +426,25 @@ async function exportExhibition(){
         catch(e){ failed++; continue; }
       }
     }
-    items.push({ name: it.name, title: it.title, desc: it.desc, url: out, type: it.type, source: it.source });
+    items.push({ name: it.name, title: it.title, desc: it.desc, url: out, type: it.type, source: it.source,
+      ...(it.sound ? { sound: it.sound } : {}), _src: it.id });
   }
+  // 공간 설정·직접 옮긴 액자 위치도 함께 공유 (가져오면 작품 id가 새로 생기므로 내보낸 순서 기준으로 저장)
+  const posOf = {}; items.forEach((x, i) => { posOf[x._src] = i; delete x._src; });
+  const place = {};
+  for (const [lay, m] of Object.entries(state.space.place || {})){
+    if (lay.startsWith('custom:')) continue;
+    const byIdx = {};
+    for (const [id, v] of Object.entries(m || {})) if (id in posOf) byIdx[posOf[id]] = v;
+    if (Object.keys(byIdx).length) place[lay] = byIdx;
+  }
+  const space = { layout: state.space.layout, walkTheme: state.walkTheme, light: state.space.light, speed: state.space.speed,
+    ambMode: amb.mode, frameSound: amb.frame, place };
   const data = {
     app: 'photo-exhibition', version: 1, exportedAt: new Date().toISOString(),
     config: { title: $('#exTitle').textContent.trim(), subtitle: c.subtitle, artist: c.artist, bio: c.bio, contact: c.contact, year: c.year },
     criteria: state.criteria,
+    space,
     items,
   };
   const json = JSON.stringify(data);
@@ -450,10 +473,35 @@ function importExhibition(file){
       $('#exSubtitle').textContent = c.subtitle;
       saveExConfig();
       if (data.criteria && data.criteria.max >= data.criteria.min) state.criteria = data.criteria;
-      state.items = data.items.filter(it => it && it.url).map(it => ({
-        id: 'w' + (++state.seq), name: it.name || '', title: it.title || prettyTitle(it.name),
-        desc: it.desc || '', url: it.url, type: it.type === 'video' ? 'video' : it.type === 'model' ? 'model' : 'image', source: it.source || 'import',
-      }));
+      const idAt = {};
+      state.items = data.items.map((it, i) => ({ it, i })).filter(({ it }) => it && it.url).map(({ it, i }) => {
+        const id = 'w' + (++state.seq); idAt[i] = id;
+        return {
+          id, name: it.name || '', title: it.title || prettyTitle(it.name),
+          desc: it.desc || '', url: it.url, type: it.type === 'video' ? 'video' : it.type === 'model' ? 'model' : 'image', source: it.source || 'import',
+          ...(it.sound === 'none' || FRAME_SOUNDS[it.sound] ? { sound: it.sound } : {}),
+        };
+      });
+      const sp = data.space;
+      if (sp && typeof sp === 'object'){
+        if (LAYOUTS[sp.layout]){ state.space.layout = sp.layout; state.space.customGLB = null; state.space.hung = []; }
+        if (WALK_THEMES[sp.walkTheme]){ state.walkTheme = sp.walkTheme; try{ localStorage.setItem('ex_wtheme_' + slug(c.title), sp.walkTheme); }catch(e){} }
+        if (sp.light > 0) state.space.light = sp.light;
+        if (sp.speed > 0) state.space.speed = sp.speed;
+        if (['gallery','rain','wind','wave'].includes(sp.ambMode)){ amb.mode = sp.ambMode; ambienceBuild(); }
+        if (typeof sp.frameSound === 'boolean'){ amb.frame = sp.frameSound; ambienceSyncCtx(); }
+        state.space.place = {};
+        for (const [lay, m] of Object.entries(sp.place || {})){
+          if (!LAYOUTS[lay] || !m) continue;
+          const out = {};
+          for (const [i, v] of Object.entries(m))
+            if (idAt[i] && v && isFinite(v.x) && isFinite(v.z) && isFinite(v.ry))
+              out[idAt[i]] = { x: +v.x, z: +v.z, ry: +v.ry, dy: isFinite(v.dy) ? +v.dy : 0 };
+          if (Object.keys(out).length) state.space.place[lay] = out;
+        }
+        walkView.valid = false;
+        saveSpace();
+      }
       $('#infoModal').hidden = true;
       renderAll();
       toast(`${state.items.length}점을 불러왔어요`);
@@ -856,7 +904,7 @@ function bindEditable(g){
 /* ---------- 3D 전시관 워크스루 ---------- */
 
 /* 3D 공간 음향: 은은한 앰비언트 패드 + 방향성 차임 (WebAudio, HRTF 패닝) */
-const amb = { ctx:null, master:null, on:true, vol:50, chime:true, mode:'gallery', gen:0, nodes:[], _nb:null };
+const amb = { ctx:null, master:null, ambBus:null, frameBus:null, on:true, frame:true, vol:50, chime:true, mode:'gallery', gen:0, nodes:[], _nb:null };
 function ambienceInit(){
   if (amb.ctx){ ambienceBuild(); return; }
   const AC = window.AudioContext || window.webkitAudioContext;
@@ -865,12 +913,15 @@ function ambienceInit(){
     const ctx = new AC(); amb.ctx = ctx;
     const master = ctx.createGain(); master.gain.value = (amb.vol / 100) * 0.26; master.connect(ctx.destination);
     amb.master = master;
+    // 배경 앰비언스와 액자별 사운드를 따로 켜고 끌 수 있도록 버스를 나눔
+    amb.ambBus = ctx.createGain(); amb.ambBus.gain.value = amb.on ? 1 : 0; amb.ambBus.connect(master);
+    amb.frameBus = ctx.createGain(); amb.frameBus.gain.value = amb.frame ? 1 : 0; amb.frameBus.connect(master);
     ambienceBuild();
   }catch(e){ /* 오디오 미지원 환경 무시 */ }
 }
 /* 공간 사운드스케이프: gallery(앰비언트 패드+차임) / rain / wind / wave */
 function ambienceBuild(){
-  const ctx = amb.ctx, master = amb.master;
+  const ctx = amb.ctx, master = amb.ambBus || amb.master;
   if (!ctx || !master) return;
   amb.gen++;
   const myGen = amb.gen;
@@ -971,10 +1022,17 @@ function ambienceBuild(){
     }
   }catch(e){}
 }
-function ambienceUpdate(camera, yaw, pitch){
-  if (!amb.ctx || !amb.on) return;
-  const L = amb.ctx.listener, p = camera.position;
-  const fx = -Math.sin(yaw)*Math.cos(pitch), fy = Math.sin(pitch), fz = -Math.cos(yaw)*Math.cos(pitch);
+const _ambP = { x:0, y:0, z:0 }, _ambF = { x:0, y:0, z:-1 };
+function ambienceUpdate(camera){
+  if (!amb.ctx || !ambienceAudible()) return;
+  const L = amb.ctx.listener;
+  // VR에서는 카메라가 돌리(dolly) 안에 있으므로 월드 좌표·방향을 써야 함
+  camera.updateMatrixWorld();
+  const e = camera.matrixWorld.elements;
+  const p = { x: e[12], y: e[13], z: e[14] };
+  let fx = -e[8], fy = -e[9], fz = -e[10];
+  const fl = Math.hypot(fx, fy, fz) || 1; fx /= fl; fy /= fl; fz /= fl;
+  _ambP.x = p.x; _ambP.y = p.y; _ambP.z = p.z; _ambF.x = fx; _ambF.y = fy; _ambF.z = fz;
   try{
     if (L.positionX){
       L.positionX.value = p.x; L.positionY.value = p.y; L.positionZ.value = p.z;
@@ -988,10 +1046,139 @@ function ambienceUpdate(camera, yaw, pitch){
 function ambienceApplyVol(){
   if (amb.ctx && amb.master) amb.master.gain.value = (amb.vol / 100) * 0.26;
 }
+const ambienceAudible = () => amb.on || amb.frame;
+function ambienceSyncCtx(){
+  if (!amb.ctx) return;
+  if (amb.ambBus) amb.ambBus.gain.value = amb.on ? 1 : 0;
+  if (amb.frameBus) amb.frameBus.gain.value = amb.frame ? 1 : 0;
+  ambienceAudible() ? amb.ctx.resume().catch(()=>{}) : amb.ctx.suspend().catch(()=>{});
+}
 function ambienceSet(on){
   amb.on = on;
-  if (amb.ctx){ on ? amb.ctx.resume().catch(()=>{}) : amb.ctx.suspend().catch(()=>{}); }
+  if (on && amb.mode === 'rain') ambienceBuild(); // 꺼져 있는 동안 멈춘 물방울 루프 재시작
+  ambienceSyncCtx();
   saveSpace();
+}
+function frameSoundSet(on){
+  amb.frame = on;
+  ambienceSyncCtx();
+  saveSpace();
+}
+
+/* ---------- 액자별 공간 사운드 (WebAudio 절차적 생성, HRTF 위치 음향) ---------- */
+// 각 액자 앞에 음원을 두고, 가까이 갈수록 커지고 방향에 따라 좌우로 들림
+const FRAME_SOUNDS = {
+  musicbox: { label:'🎶 오르골',  seq:[0,4,7,12,7,4,2,5,9,14,9,5], step:.30, rest:1.4, wave:'sine',     dec:1.1, oct:2, gain:.20 },
+  piano:    { label:'🎹 피아노',  seq:[0,7,12,16,12,7,-3,4,9,12,9,4], step:.42, rest:1.6, wave:'triangle', dec:1.7, oct:1, gain:.22 },
+  harp:     { label:'🪕 하프',    seq:[0,2,4,7,9,12,14,16], step:.16, rest:2.6, wave:'triangle', dec:1.3, oct:1, gain:.18 },
+  bell:     { label:'🔔 종소리',  seq:[0,7,12], step:1.1, rest:2.2, wave:'sine', dec:3.4, oct:1, gain:.20, bell:true },
+  pad:      { label:'🌫️ 앰비언트', seq:[0,-3,5,-5], step:3.2, rest:0, wave:'sine', dec:3.0, oct:0, gain:.10, pad:true },
+  bird:     { label:'🐦 새소리',  bird:true, gain:.07 },
+};
+const FRAME_SOUND_ORDER = ['musicbox','piano','harp','bell','pad','bird'];
+const FRAME_ROOTS = [261.63, 293.66, 329.63, 392.00, 440.00, 349.23, 246.94, 220.00];
+function frameSoundOf(it, index){
+  if (!it) return 'none';
+  if (it.sound === 'none' || FRAME_SOUNDS[it.sound]) return it.sound;
+  return FRAME_SOUND_ORDER[index % FRAME_SOUND_ORDER.length]; // 기본값: 액자마다 다른 소리
+}
+function frameNote(ctx, dest, t, freq, P){
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0.0001, t);
+  if (P.pad){
+    env.gain.linearRampToValueAtTime(P.gain, t + 1.2);
+    env.gain.linearRampToValueAtTime(0.0001, t + P.dec + 1.2);
+    env.connect(dest);
+    [1, 1.26, 1.5].forEach((m, i) => {
+      const o = ctx.createOscillator(); o.type = P.wave; o.frequency.value = freq * m; o.detune.value = (i - 1) * 5;
+      o.connect(env); o.start(t); o.stop(t + P.dec + 1.4);
+    });
+    return;
+  }
+  env.gain.exponentialRampToValueAtTime(P.gain, t + 0.012);
+  env.gain.exponentialRampToValueAtTime(0.0001, t + P.dec);
+  env.connect(dest);
+  const o = ctx.createOscillator(); o.type = P.wave; o.frequency.value = freq;
+  o.connect(env); o.start(t); o.stop(t + P.dec + 0.05);
+  if (P.bell || P.oct === 2){
+    // 종·오르골: 비정수배 배음으로 금속성 울림
+    const o2 = ctx.createOscillator(); o2.type = 'sine'; o2.frequency.value = freq * (P.bell ? 2.76 : 4.0);
+    const g2 = ctx.createGain();
+    g2.gain.setValueAtTime(0.0001, t);
+    g2.gain.exponentialRampToValueAtTime(P.gain * 0.35, t + 0.01);
+    g2.gain.exponentialRampToValueAtTime(0.0001, t + P.dec * 0.35);
+    o2.connect(g2); g2.connect(dest); o2.start(t); o2.stop(t + P.dec * 0.4);
+  }
+}
+function frameChirp(ctx, dest, t, base, P){
+  const o = ctx.createOscillator(); o.type = 'sine';
+  o.frequency.setValueAtTime(base, t);
+  o.frequency.exponentialRampToValueAtTime(base * 1.6, t + 0.07);
+  o.frequency.exponentialRampToValueAtTime(base * 1.1, t + 0.12);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(P.gain, t + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+  o.connect(g); g.connect(dest); o.start(t); o.stop(t + 0.15);
+}
+const FRAME_HEAR = 11;      // 이 거리(m) 안의 액자만 연주
+const FRAME_MAX_ACTIVE = 4; // 가까운 순으로 최대 4곳 동시 연주
+function makeFrameSoundSystem(){
+  const sys = { list: [] };
+  sys.add = (id, index, x, y, z) => {
+    if (!amb.ctx || !amb.frameBus) return null;
+    const ctx = amb.ctx;
+    const pan = ctx.createPanner();
+    pan.panningModel = 'HRTF'; pan.distanceModel = 'inverse';
+    pan.refDistance = 1.0; pan.rolloffFactor = 1.4; pan.maxDistance = 40;
+    pan.connect(amb.frameBus);
+    const f = { id, index, pan, x, y, z, active: false, nextT: 0, i: 0 };
+    sys.setPos(f, x, y, z);
+    sys.list.push(f);
+    return f;
+  };
+  sys.setPos = (f, x, y, z) => {
+    f.x = x; f.y = y; f.z = z;
+    const p = f.pan;
+    if (p.positionX){ p.positionX.value = x; p.positionY.value = y; p.positionZ.value = z; }
+    else p.setPosition(x, y, z);
+  };
+  sys.tick = (lp) => {
+    const ctx = amb.ctx;
+    if (!ctx || !amb.frame || ctx.state !== 'running') return;
+    const now = ctx.currentTime, ahead = now + 0.3;
+    const near = [];
+    for (const f of sys.list){
+      f.d = Math.hypot(f.x - lp.x, f.z - lp.z);
+      if (f.d < FRAME_HEAR) near.push(f); else f.active = false;
+    }
+    near.sort((a, b) => a.d - b.d);
+    near.forEach((f, rank) => {
+      if (rank >= FRAME_MAX_ACTIVE){ f.active = false; return; }
+      const it = state.items.find(x => x.id === f.id);
+      const key = frameSoundOf(it, f.index);
+      const P = FRAME_SOUNDS[key];
+      if (!P){ f.active = false; return; }
+      if (!f.active){ f.active = true; f.nextT = now + 0.05; f.i = 0; }
+      const root = FRAME_ROOTS[f.index % FRAME_ROOTS.length];
+      let guard = 0;
+      while (f.nextT < ahead && guard++ < 16){
+        if (P.bird){
+          const n = 2 + (Math.random() * 3 | 0), base = 2200 + Math.random() * 1600;
+          for (let k = 0; k < n; k++) frameChirp(ctx, f.pan, f.nextT + k * 0.16, base * (1 + k * 0.04), P);
+          f.nextT += n * 0.16 + 1.2 + Math.random() * 2.5;
+          continue;
+        }
+        const semi = P.seq[f.i % P.seq.length];
+        const freq = root * Math.pow(2, semi / 12) * (P.oct === 2 ? 2 : P.oct === 0 ? 0.5 : 1);
+        frameNote(ctx, f.pan, f.nextT, freq, P);
+        f.i++;
+        f.nextT += P.step + (f.i % P.seq.length === 0 ? P.rest : 0);
+      }
+    });
+  };
+  sys.dispose = () => { sys.list.forEach(f => { try{ f.pan.disconnect(); }catch(e){} }); sys.list = []; };
+  return sys;
 }
 
 function renderWalkthrough(g, items){
@@ -1005,6 +1192,7 @@ function renderWalkthrough(g, items){
       <button class="btn sm" id="btnWalkHelp">❔ 조작법</button>
       <button class="btn sm" id="btnFull">⛶ 전체화면</button>
       <button class="btn sm" id="btnVR">🥽 VR</button>
+      <button class="btn sm" id="btnFrameSnd" title="액자별 사운드 켜기/끄기">${amb.frame ? '🎵' : '🔇'} 작품 사운드</button>
       <button class="btn sm" id="btnViewReset" title="시점을 입구로 되돌리기">⌂ 시점</button>
       <button class="btn sm" id="btnWalkMenu" title="가져오기·설정 메뉴">☰</button>
       <button class="btn sm" id="btnHang" hidden>🖼️ 벽에 걸기</button>
@@ -1021,12 +1209,14 @@ function renderWalkthrough(g, items){
       <button class="btn sm" id="btnWCriteria">⚙️ 전시 기준</button>
       <button class="btn sm" id="btnWGlb">🏛️ 3D 전시공간 가져오기</button>
     </div>
-    <div class="walk-hint">${('ontouchstart' in window) ? '드래그: 둘러보기 · 조이스틱: 이동 · 작품 터치: 크게 보기' : '드래그: 시점 회전 · W A S D: 이동 · 작품 클릭: 크게 보기'}</div>
+    <div class="walk-hint">${('ontouchstart' in window) ? '드래그: 둘러보기 · 조이스틱: 이동 · 길게 누르기: 액자 옮기기·사운드' : '드래그: 시점 회전 · W A S D: 이동 · 우클릭: 액자 옮기기·사운드'}</div>
     <div class="walk-loading" id="walkLoading">
       <div class="walk-loading-t">🖼️ 전시장을 준비하는 중…</div>
       <div class="walk-loading-bar"><div id="walkBar"></div></div>
     </div>
-    <div class="walk-lookcard" id="walkLook" hidden></div>`;
+    <div class="walk-lookcard" id="walkLook" hidden></div>
+    <div class="walk-ctx" id="walkCtx" hidden></div>
+    <div class="walk-movebar" id="walkMoveBar" hidden></div>`;
   // 전체화면 상태에서도 초기 높이를 onResize와 동일하게 계산해야 함
   // (편집 모달 닫기·설정 변경 시 renderGallery가 3D 뷰를 재생성하는데,
   //  여기서 전체화면을 무시하면 캔버스가 innerHeight-170으로 줄어든 채 남음)
@@ -1036,6 +1226,8 @@ function renderWalkthrough(g, items){
   scene.background = new THREE.Color(theme.bg);
   scene.fog = new THREE.Fog(theme.bg, 25, 210);
   const camera = new THREE.PerspectiveCamera(68, W/H, 0.1, 400);
+  // VR에서는 헤드셋이 camera 위치를 덮어쓰므로, 이동은 부모 dolly로 처리
+  const dolly = new THREE.Group(); dolly.add(camera); scene.add(dolly);
   const EYE = 1.65;
   const renderer = new THREE.WebGLRenderer({ antialias:true });
   renderer.setSize(W, H);
@@ -1101,8 +1293,9 @@ function renderWalkthrough(g, items){
     firstRowZ = 0;
   } else if (layout === 'maze'){
     // 미로: 엇갈린 지그재그 파티션
-    const SEGS_PER_ROW = 5, SEG_LEN = 13, ROW_GAP = 8, SEG_GAP = 5;
+    const SEG_LEN = 13, ROW_GAP = 8, SEG_GAP = 5;
     const perSeg = Math.max(2, Math.floor(SEG_LEN / SPACING)) * 2;
+    const SEGS_PER_ROW = Math.max(2, Math.min(5, Math.ceil(N / perSeg)));
     const rows = Math.max(1, Math.ceil(N / (perSeg * SEGS_PER_ROW)));
     const trackW = SEGS_PER_ROW * (SEG_LEN + SEG_GAP);
     hallW = trackW + 30; hallD = (rows - 1) * ROW_GAP + 36;
@@ -1137,8 +1330,10 @@ function renderWalkthrough(g, items){
     firstRowZ = hallD;
   } else {
     // 서펜타인: 지그재그 파티션 행
-    const SEGS_PER_ROW = 5, SEG_LEN = 16, ROW_GAP = 11, SEG_GAP = 7;
+    const SEG_LEN = 16, ROW_GAP = 11, SEG_GAP = 7;
     const perSeg = Math.max(2, Math.floor(SEG_LEN / SPACING)) * 2;
+    // 작품 수에 맞춰 파티션 수를 줄임 (적을 때 작품이 한쪽 끝에만 몰리지 않도록)
+    const SEGS_PER_ROW = Math.max(1, Math.min(5, Math.ceil(N / perSeg)));
     const rows = Math.max(1, Math.ceil(N / (perSeg * SEGS_PER_ROW)));
     const rowW = SEGS_PER_ROW * SEG_LEN + (SEGS_PER_ROW - 1) * SEG_GAP;
     hallW = rowW + 30; hallD = (rows - 1) * ROW_GAP + 36;
@@ -1229,9 +1424,10 @@ function renderWalkthrough(g, items){
   }
   const wallMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .95, map: tiledTex(wallCv, 5, 1.4) });
   const wallMatOuter = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .95, map: tiledTex(wallCv, 30, 3) });
+  const wallMeshes = [];
   const mkWall = (w, h, x, y, z, ry) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), wallMatOuter);
-    m.position.set(x, y, z); m.rotation.y = ry; scene.add(m);
+    m.position.set(x, y, z); m.rotation.y = ry; scene.add(m); wallMeshes.push(m);
   };
   if (!useCustom){
     mkWall(hallW, HH, 0, HH/2, -hd, 0);
@@ -1242,7 +1438,7 @@ function renderWalkthrough(g, items){
 
   // 공간 음향
   ambienceInit();
-  if (amb.on && amb.ctx) amb.ctx.resume().catch(() => {});
+  if (ambienceAudible() && amb.ctx) amb.ctx.resume().catch(() => {});
 
   /* ---------- 작품 배치 ---------- */
   const manager = new THREE.LoadingManager();
@@ -1276,6 +1472,14 @@ function renderWalkthrough(g, items){
   })();
 
   let idx = 0;
+  // 사용자가 직접 옮긴 액자 위치 (배치 종류별로 저장)
+  const placeKey = useCustom ? 'custom:' + customName : layout;
+  const places = (state.space.place = state.space.place || {});
+  const myPlace = places[placeKey] || {};
+  const overridden = id => !useCustom && !!myPlace[id];
+  const autoList = items.filter(it => !overridden(it.id));
+  const placed = {}; // itemId -> { grp, wp, snd, x, z, ry, dy, model }
+  const fsnd = makeFrameSoundSystem();
   const hungIds = new Set((state.space.hung || []).map(h => h.id));
   hungIdsClear = () => hungIds.clear();
   const pedGeo = new THREE.CylinderGeometry(0.55, 0.68, 1.0, 20);
@@ -1321,17 +1525,21 @@ function renderWalkthrough(g, items){
     plate.position.set(px + normal.x * 0.62, 0.62, pz + normal.z * 0.62);
     plate.rotation.y = ry;
     scene.add(plate);
-    waypoints.push({
+    const wp = {
       cam: new THREE.Vector3(px + normal.x * 3.2, EYE, pz + normal.z * 3.2),
       look: new THREE.Vector3(px, 1.6, pz),
-    });
+    };
+    waypoints.push(wp);
+    const snd = fsnd.add(it.id, items.indexOf(it), px, 1.6, pz);
+    placed[it.id] = { grp, wp, snd, x, z, ry, dy: 0, model: true };
   };
-  const hangOne = (x, z, ry, item) => {
-    const it = item || items[idx++];
+  const hangOne = (x, z, ry, item, dy) => {
+    const it = item || autoList[idx++];
     if (!it) return;
     if (it.type === 'model'){ hangModel(x, z, ry, it); return; }
+    dy = dy || 0;
     const grp = new THREE.Group();
-    grp.position.set(x, ART_Y, z);
+    grp.position.set(x, ART_Y + dy, z);
     grp.rotation.y = ry;
     const frame = new THREE.Mesh(frameGeo, frameMat); grp.add(frame);
     const mat = new THREE.MeshBasicMaterial({ color: 0x2a2a2e });
@@ -1369,30 +1577,39 @@ function renderWalkthrough(g, items){
     plate.position.set(0, -(FH/2 + 0.24), 0.045); grp.add(plate);
     scene.add(grp);
     const normal = new THREE.Vector3(0, 0, 1).applyEuler(grp.rotation);
-    waypoints.push({
+    const wp = {
       cam: grp.position.clone().add(normal.clone().multiplyScalar(3.1)).setY(EYE),
       look: grp.position.clone(),
-    });
+    };
+    waypoints.push(wp);
+    const snd = fsnd.add(it.id, items.indexOf(it), x + normal.x * 0.4, ART_Y + dy, z + normal.z * 0.4);
+    placed[it.id] = { grp, wp, snd, x, z, ry, dy, model: false };
   };
   outer:
   for (const seg of wallSegs){
     const ry = seg.ry || 0;
     const wall = new THREE.Mesh(wallGeoOf(seg.len), wallMat);
-    wall.position.set(seg.cx, SEG_H / 2, seg.cz); wall.rotation.y = ry; scene.add(wall);
+    wall.position.set(seg.cx, SEG_H / 2, seg.cz); wall.rotation.y = ry; scene.add(wall); wallMeshes.push(wall);
     colliders.push({ cx: seg.cx, cz: seg.cz, len: seg.len, ry });
     const perSide = Math.max(2, Math.floor(seg.len / SPACING));
     const cosR = Math.cos(ry), sinR = Math.sin(ry);
     for (const side of [1, -1]) for (let k = 0; k < perSide; k++){
-      if (idx >= N) break outer;
+      if (idx >= autoList.length) break outer;
       const lx = -(perSide - 1) * SPACING / 2 + k * SPACING;
       const lz = side * (SEG_T / 2 + 0.06);
       hangOne(seg.cx + lx * cosR + lz * sinR, seg.cz - lx * sinR + lz * cosR, ry + (side > 0 ? 0 : Math.PI));
     }
   }
+  if (!useCustom){
+    for (const it of items){
+      const o = myPlace[it.id];
+      if (o) hangOne(o.x, o.z, o.ry, it, o.dy);
+    }
+  }
   if (useCustom && state.space.hung){
     for (const h of state.space.hung){
       const it = items.find(i => i.id === h.id);
-      if (it) hangOne(h.x, h.z, h.ry, it);
+      if (it) hangOne(h.x, h.z, h.ry, it, h.dy);
     }
   }
   if (texCount === 0 && loadingEl) loadingEl.remove();
@@ -1525,25 +1742,42 @@ function renderWalkthrough(g, items){
   let dragging = false, lx = 0, ly = 0, moved = 0;
   const keys = {};
   const el = renderer.domElement;
-  const pDown = e => { dragging = true; lx = e.clientX; ly = e.clientY; moved = 0; stopTour(); };
+  let pressTimer = 0;
+  const pDown = e => {
+    if (e.button === 2) return; // 우클릭은 메뉴 전용
+    closeCtx();
+    // 브라우저 자동재생 정책: 첫 사용자 입력 때 오디오 시작
+    if (amb.ctx && amb.ctx.state !== 'running' && ambienceAudible()) amb.ctx.resume().catch(() => {});
+    dragging = true; lx = e.clientX; ly = e.clientY; moved = 0; stopTour();
+    clearTimeout(pressTimer);
+    if (e.pointerType === 'touch'){
+      // 길게 누르기 = 우클릭 메뉴 (모바일)
+      const cx0 = e.clientX, cy0 = e.clientY;
+      pressTimer = setTimeout(() => { if (moved < 10){ dragging = false; openCtx(cx0, cy0); } }, 600);
+    }
+  };
   const pMove = e => {
     if (!dragging) return;
     const dx = e.clientX - lx, dy = e.clientY - ly; lx = e.clientX; ly = e.clientY;
     moved += Math.abs(dx) + Math.abs(dy);
+    if (moved >= 10) clearTimeout(pressTimer);
     yaw -= dx * 0.004; pitch = Math.max(-1.1, Math.min(1.1, pitch - dy * 0.004));
   };
-  const pUp = () => dragging = false;
+  const pUp = () => { dragging = false; clearTimeout(pressTimer); };
   el.addEventListener('pointerdown', pDown);
   window.addEventListener('pointermove', pMove);
   window.addEventListener('pointerup', pUp);
-  const kDown = e => { keys[e.key.toLowerCase()] = true; stopTour();
+  const kDown = e => {
+    if (e.key === 'Escape' && (moveState || !ctxEl.hidden)){ cancelMove(); closeCtx(); return; }
+    if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+    keys[e.key.toLowerCase()] = true; stopTour();
     if (['arrowup','arrowdown',' '].includes(e.key.toLowerCase())) e.preventDefault(); };
   const kUp = e => keys[e.key.toLowerCase()] = false;
   window.addEventListener('keydown', kDown);
   window.addEventListener('keyup', kUp);
 
   // 모바일 가상 조이스틱
-  let joyVec = null, joyEl = null;
+  let joyVec = null, joyEl = null, joyMove = null;
   if ('ontouchstart' in window){
     joyEl = document.createElement('div');
     joyEl.className = 'walk-joy'; joyEl.innerHTML = '<div class="walk-joy-knob"></div>';
@@ -1555,14 +1789,15 @@ function renderWalkthrough(g, items){
       const r = joyEl.getBoundingClientRect(); jcx = r.left + r.width/2; jcy = r.top + r.height/2;
       stopTour(); e.preventDefault();
     }, { passive: false });
-    window.addEventListener('touchmove', e => {
+    joyMove = e => {
       for (const t of e.changedTouches) if (t.identifier === joyId){
         let dx = (t.clientX - jcx) / 45, dy = (t.clientY - jcy) / 45;
         const l = Math.hypot(dx, dy); if (l > 1){ dx /= l; dy /= l; }
         joyVec = { x: dx, y: dy };
         knob.style.transform = `translate(${dx * 30}px,${dy * 30}px)`;
       }
-    }, { passive: true });
+    };
+    window.addEventListener('touchmove', joyMove, { passive: true });
     const joyEnd = e => {
       for (const t of e.changedTouches) if (t.identifier === joyId){
         joyId = null; joyVec = null; knob.style.transform = '';
@@ -1651,13 +1886,189 @@ function renderWalkthrough(g, items){
     saveSpace(); updateHangUI();
     toast(`${perClick}점을 걸었어요 (남은 ${remaining.length - perClick}점)`);
   };
+  /* ---------- 액자 직접 배치: 우클릭 메뉴 · 옮기기 모드 ---------- */
+  const ctxEl = $('#walkCtx'), moveBar = $('#walkMoveBar');
+  let moveState = null; // { id, orig:{x,z,ry,dy} }
+  const tmpN = new THREE.Vector3();
+  const setPtr = (cx, cy) => {
+    const r = el.getBoundingClientRect();
+    ptr.x = ((cx - r.left) / r.width) * 2 - 1;
+    ptr.y = -((cy - r.top) / r.height) * 2 + 1;
+    ray.far = Infinity;
+    ray.setFromCamera(ptr, camera);
+  };
+  const wallTargets = () => useCustom ? customMeshes : wallMeshes;
+  const wallHit = () => {
+    const hit = ray.intersectObjects(wallTargets(), false)[0];
+    if (!hit || !hit.face) return null;
+    tmpN.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);
+    if (Math.abs(tmpN.y) > 0.5) return null;
+    // 양면이 아닌 판(외벽)은 앞면, 파티션 상자는 맞은 면 기준
+    tmpN.y = 0; tmpN.normalize();
+    if (tmpN.dot(ray.ray.direction) > 0) tmpN.negate();
+    return { x: hit.point.x + tmpN.x * 0.06, z: hit.point.z + tmpN.z * 0.06, ry: Math.atan2(tmpN.x, tmpN.z), y: hit.point.y };
+  };
+  const frameHitId = () => {
+    const hit = ray.intersectObjects(photoMeshes)[0];
+    return hit ? hit.object.userData.itemId : null;
+  };
+  const applyPlacement = (id, x, z, ry, dy) => {
+    const P = placed[id]; if (!P || P.model) return;
+    P.x = x; P.z = z; P.ry = ry; P.dy = dy;
+    P.grp.position.set(x, ART_Y + dy, z); P.grp.rotation.set(0, ry, 0);
+    const nx = Math.sin(ry), nz = Math.cos(ry);
+    P.wp.cam.set(x + nx * 3.1, EYE, z + nz * 3.1); P.wp.look.set(x, ART_Y + dy, z);
+    if (P.snd) fsnd.setPos(P.snd, x + nx * 0.4, ART_Y + dy, z + nz * 0.4);
+  };
+  const commitPlacement = id => {
+    const P = placed[id]; if (!P) return;
+    const rec = { x: +P.x.toFixed(2), z: +P.z.toFixed(2), ry: +P.ry.toFixed(3), dy: +P.dy.toFixed(2) };
+    if (useCustom){
+      const h = (state.space.hung || []).find(v => v.id === id);
+      if (h) Object.assign(h, rec); else (state.space.hung = state.space.hung || []).push({ id, ...rec });
+    } else {
+      places[placeKey] = places[placeKey] || {};
+      places[placeKey][id] = rec;
+    }
+    saveSpace();
+  };
+  const titleOf = id => { const i = items.findIndex(v => v.id === id); return i < 0 ? '' : `No.${i + 1} ${items[i].title || '무제'}`; };
+  const startMove = id => {
+    const P = placed[id];
+    if (!P || P.model){ toast('3D 모델은 좌대에 고정돼 있어요'); return; }
+    moveState = { id, orig: { x: P.x, z: P.z, ry: P.ry, dy: P.dy } };
+    el.style.cursor = 'crosshair';
+    moveBar.hidden = false;
+    moveBar.innerHTML = `<b>✋ ${esc(titleOf(id))}</b> 옮기는 중 · ${('ontouchstart' in window) ? '벽을 터치하면 걸려요' : '벽을 가리키고 클릭하면 걸려요'} <button class="btn sm" id="mvCancel">취소</button>`;
+    $('#mvCancel').onclick = e => { e.stopPropagation(); cancelMove(); };
+  };
+  const endMove = () => { moveState = null; moveBar.hidden = true; el.style.cursor = hangMode ? 'crosshair' : ''; };
+  const cancelMove = () => {
+    if (!moveState) return;
+    const o = moveState.orig; applyPlacement(moveState.id, o.x, o.z, o.ry, o.dy);
+    endMove();
+  };
+  const onHoverMove = e => {
+    if (!moveState || dragging) return;
+    setPtr(e.clientX, e.clientY);
+    const w = wallHit();
+    if (w) applyPlacement(moveState.id, w.x, w.z, w.ry, placed[moveState.id].dy);
+  };
+  el.addEventListener('pointermove', onHoverMove);
+  const resetOne = id => {
+    if (useCustom){ toast('직접 가져온 3D 공간에서는 옮긴 위치가 곧 걸린 위치예요'); return; }
+    if (places[placeKey]) delete places[placeKey][id];
+    saveSpace(); renderGallery(); toast('원래 자리로 돌려놨어요');
+  };
+  const closeCtx = () => { if (ctxEl) ctxEl.hidden = true; };
+  const openCtx = (cx, cy) => {
+    if (moveState){ cancelMove(); return; }
+    setPtr(cx, cy);
+    const fid = frameHitId();
+    const wall = fid ? null : wallHit();
+    let html = '';
+    if (fid){
+      const P = placed[fid], it = items.find(v => v.id === fid);
+      const cur = frameSoundOf(it, items.indexOf(it));
+      const custom = !useCustom && myPlace[fid];
+      html = `<div class="ctx-h">${esc(titleOf(fid))}</div>
+        <button data-a="view">🔍 크게 보기</button>
+        ${P && !P.model ? `<button data-a="move">✋ 위치 옮기기</button>
+        <div class="ctx-row"><button data-a="up">⬆ 높이</button><button data-a="down">⬇ 낮게</button></div>` : ''}
+        <div class="ctx-sub">공간 사운드${it && !it.sound ? ' (자동)' : ''}</div>
+        <div class="ctx-snd">${Object.entries(FRAME_SOUNDS).map(([k, v]) =>
+          `<button data-snd="${k}" class="${k === cur ? 'on' : ''}">${v.label}</button>`).join('')}
+          <button data-snd="none" class="${cur === 'none' ? 'on' : ''}">🔇 없음</button></div>
+        ${custom ? '<button data-a="reset">↺ 원래 자리로</button>' : ''}`;
+    } else if (wall){
+      const list = items.filter(v => placed[v.id] && !placed[v.id].model);
+      html = `<div class="ctx-h">🖼️ 여기에 작품 걸기</div>
+        <div class="ctx-list">${list.map(v => `<button data-here="${v.id}">${esc(titleOf(v.id))}</button>`).join('') || '<span class="ctx-sub">걸 수 있는 작품이 없어요</span>'}</div>`;
+    } else {
+      html = `<div class="ctx-h">전시장</div>
+        <button data-a="sndall">${amb.frame ? '🔇 작품 사운드 끄기' : '🎵 작품 사운드 켜기'}</button>
+        ${!useCustom && Object.keys(myPlace).length ? '<button data-a="resetall">↺ 옮긴 액자 모두 원래대로</button>' : ''}
+        <span class="ctx-sub">벽이나 액자 위에서 우클릭하면 배치할 수 있어요</span>`;
+    }
+    ctxEl.innerHTML = html;
+    ctxEl.hidden = false;
+    const gr = g.getBoundingClientRect();
+    const mw = ctxEl.offsetWidth, mh = ctxEl.offsetHeight;
+    ctxEl.style.left = Math.max(6, Math.min(cx - gr.left, gr.width - mw - 6)) + 'px';
+    ctxEl.style.top = Math.max(6, Math.min(cy - gr.top, gr.height - mh - 6)) + 'px';
+    ctxEl.onclick = ev => {
+      ev.stopPropagation();
+      const b = ev.target.closest('button'); if (!b) return;
+      const a = b.dataset.a;
+      if (b.dataset.snd && fid){
+        const it = items.find(v => v.id === fid);
+        if (it){ it.sound = b.dataset.snd; saveItems(); }
+        const P = placed[fid]; if (P && P.snd) P.snd.active = false; // 새 소리로 즉시 다시 시작
+        if (!amb.frame && b.dataset.snd !== 'none'){ frameSoundSet(true); syncFrameBtn(); }
+        if (amb.ctx) amb.ctx.resume().catch(() => {});
+        closeCtx();
+        toast(b.dataset.snd === 'none' ? '이 작품의 소리를 껐어요' : `이 작품에 '${FRAME_SOUNDS[b.dataset.snd].label}' 소리를 넣었어요 — 가까이 가면 들려요`);
+        return;
+      }
+      if (b.dataset.here && wall){
+        const id = b.dataset.here, P = placed[id];
+        applyPlacement(id, wall.x, wall.z, wall.ry, P ? P.dy : 0);
+        commitPlacement(id); closeCtx();
+        toast(`${titleOf(id)}을(를) 여기에 걸었어요`);
+        return;
+      }
+      closeCtx();
+      if (a === 'view') openLightbox(fid);
+      else if (a === 'move') startMove(fid);
+      else if (a === 'up' || a === 'down'){
+        const P = placed[fid];
+        const dy = Math.max(-0.6, Math.min(1.6, P.dy + (a === 'up' ? 0.15 : -0.15)));
+        applyPlacement(fid, P.x, P.z, P.ry, dy); commitPlacement(fid);
+      }
+      else if (a === 'reset') resetOne(fid);
+      else if (a === 'sndall'){ frameSoundSet(!amb.frame); syncFrameBtn(); toast(amb.frame ? '작품 사운드를 켰어요' : '작품 사운드를 껐어요'); }
+      else if (a === 'resetall'){ delete places[placeKey]; saveSpace(); renderGallery(); toast('옮긴 액자를 모두 원래 자리로 돌렸어요'); }
+    };
+  };
+  const onCtxMenu = e => { e.preventDefault(); dragging = false; openCtx(e.clientX, e.clientY); };
+  el.addEventListener('contextmenu', onCtxMenu);
+  const onDocDown = e => { if (ctxEl && !ctxEl.hidden && !e.target.closest('#walkCtx')) closeCtx(); };
+  document.addEventListener('pointerdown', onDocDown, true);
+  const syncFrameBtn = () => { const b = $('#btnFrameSnd'); if (b) b.textContent = `${amb.frame ? '🎵' : '🔇'} 작품 사운드`; };
+  $('#btnFrameSnd').addEventListener('click', e => {
+    e.stopPropagation();
+    frameSoundSet(!amb.frame); syncFrameBtn();
+    if (amb.frame && amb.ctx) amb.ctx.resume().catch(() => {});
+    toast(amb.frame ? '작품 사운드를 켰어요 — 액자 가까이 가면 들려요 (우클릭으로 소리 바꾸기)' : '작품 사운드를 껐어요');
+  });
+
   const onClick = e => {
     if (moved > 10) return;
-    if (hangMode && useCustom){ doHangClick(e); return; }
-    const r = el.getBoundingClientRect();
-    ptr.x = ((e.clientX - r.left) / r.width) * 2 - 1;
-    ptr.y = -((e.clientY - r.top) / r.height) * 2 + 1;
-    ray.setFromCamera(ptr, camera);
+    if (moveState){
+      setPtr(e.clientX, e.clientY);
+      const w = wallHit();
+      if (!w){ toast('벽을 가리켜주세요'); return; }
+      const id = moveState.id, orig = moveState.orig;
+      applyPlacement(id, w.x, w.z, w.ry, placed[id].dy);
+      // 다른 액자 위에 놓으면 겹치지 않게 두 액자 자리를 맞바꿈
+      const other = Object.keys(placed).find(k => {
+        const Q = placed[k];
+        if (k === id || Q.model) return false;
+        const dr = Math.abs(Math.atan2(Math.sin(Q.ry - w.ry), Math.cos(Q.ry - w.ry)));
+        return dr < 0.2 && Math.hypot(Q.x - w.x, Q.z - w.z) < FW * 0.75;
+      });
+      if (other){
+        const Q = placed[other];
+        applyPlacement(id, Q.x, Q.z, Q.ry, placed[id].dy);
+        applyPlacement(other, orig.x, orig.z, orig.ry, Q.dy);
+        commitPlacement(other);
+      }
+      commitPlacement(id); endMove();
+      toast(other ? `${titleOf(id)} ↔ ${titleOf(other)} 자리를 바꿨어요` : `${titleOf(id)}을(를) 옮겼어요`);
+      return;
+    }
+    if (hangMode && useCustom){ ray.far = Infinity; doHangClick(e); return; }
+    setPtr(e.clientX, e.clientY);
     const hit = ray.intersectObjects(photoMeshes)[0];
     if (hit) openLightbox(hit.object.userData.itemId);
   };
@@ -1678,7 +2089,7 @@ function renderWalkthrough(g, items){
     }
   });
   $('#btnWalkHelp').addEventListener('click', () =>
-    toast('드래그: 둘러보기 · W A S D / 방향키: 이동 · 조이스틱(모바일): 이동 · 작품 클릭: 크게 보기'));
+    toast('드래그: 둘러보기 · WASD/방향키: 이동 · 작품 클릭: 크게 보기 · 우클릭(모바일은 길게 누르기): 액자 옮기기·높이·사운드'));
   $('#btnSpace').addEventListener('click', openSpaceModal);
   $('#btnEdit').addEventListener('click', openEditModal);
   $('#btnViewReset').addEventListener('click', () => {
@@ -1705,6 +2116,7 @@ function renderWalkthrough(g, items){
       glbCache[f.name] = dataUrl;
       state.space.customGLB = { name: f.name };
       state.space.hung = []; hungIdsClear();
+      walkView.valid = false;
       saveSpace(); renderGallery();
       toast(`3D 전시공간 '${f.name}'을 불러왔어요. 🖼️ 벽에 걸기로 작품을 걸어보세요`);
     };
@@ -1735,7 +2147,11 @@ function renderWalkthrough(g, items){
   const onVRSessionEnd = () => {
     vrActive = false; vrSession = null;
     renderer.setAnimationLoop(null); useXRLoop = false;
-    camera.position.y = EYE;
+    // 돌리 위치를 일반 카메라 위치로 되돌림
+    camera.updateMatrixWorld();
+    const wx = camera.matrixWorld.elements[12], wz = camera.matrixWorld.elements[14];
+    dolly.position.set(0, 0, 0); dolly.rotation.set(0, 0, 0);
+    camera.position.set(wx, EYE, wz);
     setVRButton();
     if (alive) raf = requestAnimationFrame(animate);
   };
@@ -1749,7 +2165,11 @@ function renderWalkthrough(g, items){
       renderer.xr.enabled = true;
       session = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor'] });
       vrSession = session; vrActive = true;
-      camera.position.y = 0; // 헤드셋 높이를 그대로 사용 (바닥 기준)
+      // 현재 서 있던 자리·방향을 돌리로 옮기고, 카메라는 헤드셋이 담당 (바닥 기준 높이)
+      dolly.position.set(camera.position.x, 0, camera.position.z);
+      dolly.rotation.set(0, yaw, 0);
+      camera.position.set(0, 0, 0); camera.rotation.set(0, 0, 0);
+      closeCtx(); cancelMove();
       session.addEventListener('end', onVRSessionEnd);
       await renderer.xr.setSession(session);
       cancelAnimationFrame(raf); useXRLoop = true;
@@ -1768,7 +2188,8 @@ function renderWalkthrough(g, items){
   });
 
   const fwd = new THREE.Vector3(), rgt = new THREE.Vector3(), cdir = new THREE.Vector3();
-  let raf = 0, alive = true, last = performance.now(), frame = 0;
+  let raf = 0, alive = true, last = performance.now(), frame = 0, sndFrame = 0, vrTurnLatch = false;
+  const camW = new THREE.Vector3();
   const animate = now => {
     if (!alive) return;
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
@@ -1788,30 +2209,51 @@ function renderWalkthrough(g, items){
       const d = new THREE.Vector3().subVectors(lookTarget, camera.position);
       yaw = Math.atan2(-d.x, -d.z); pitch = Math.atan2(d.y, Math.hypot(d.x, d.z));
     } else if (vrActive && renderer.xr.isPresenting) {
-      // VR: 헤드셋 방향으로 이동, 시점·높이는 헤드셋이 담당
+      // VR: 헤드셋 방향으로 돌리를 이동 (헤드셋이 camera 위치를 매 프레임 덮어쓰기 때문)
+      // 왼손 스틱: 이동 · 오른손 스틱 좌우: 30° 스냅 회전
       camera.getWorldDirection(cdir);
       fwd.set(cdir.x, 0, cdir.z);
       if (fwd.lengthSq() > 1e-6) fwd.normalize(); else fwd.set(0, 0, -1);
       rgt.set(-fwd.z, 0, fwd.x);
       const sp = 3.6 * dt * state.space.speed;
-      let mx = 0, mz = 0;
+      let mx = 0, mz = 0, turn = 0;
       if (vrSession){
-        for (const src of vrSession.inputSources){
-          if (src.gamepad && src.gamepad.axes && src.gamepad.axes.length >= 4){
-            mx = src.gamepad.axes[2]; mz = src.gamepad.axes[3]; break;
-          }
+        const srcs = [...vrSession.inputSources].filter(s2 => s2.gamepad && s2.gamepad.axes && s2.gamepad.axes.length >= 4);
+        const both = srcs.some(s2 => s2.handedness === 'left') && srcs.some(s2 => s2.handedness === 'right');
+        for (const src of srcs){
+          const ax = src.gamepad.axes;
+          if (both && src.handedness === 'right') turn = ax[2];
+          else if (!mx && !mz){ mx = ax[2]; mz = ax[3]; }
         }
       }
-      if (Math.abs(mx) > 0.15) camera.position.addScaledVector(rgt, mx * sp);
-      if (Math.abs(mz) > 0.15) camera.position.addScaledVector(fwd, -mz * sp);
-      if (keys['w'] || keys['arrowup']) camera.position.addScaledVector(fwd, sp);
-      if (keys['s'] || keys['arrowdown']) camera.position.addScaledVector(fwd, -sp);
-      if (keys['a'] || keys['arrowleft']) camera.position.addScaledVector(rgt, -sp);
-      if (keys['d'] || keys['arrowright']) camera.position.addScaledVector(rgt, sp);
-      if (joyVec){
-        camera.position.addScaledVector(fwd, -joyVec.y * sp).addScaledVector(rgt, joyVec.x * sp);
-      }
-      collide(camera.position);
+      if (Math.abs(turn) > 0.7){
+        if (!vrTurnLatch){
+          vrTurnLatch = true;
+          // 머리 위치를 축으로 회전해야 멀미가 적음
+          camera.updateMatrixWorld();
+          const hx = camera.matrixWorld.elements[12], hz = camera.matrixWorld.elements[14];
+          const a = turn > 0 ? -Math.PI / 6 : Math.PI / 6;
+          const c = Math.cos(a), s2 = Math.sin(a);
+          const ox = dolly.position.x - hx, oz = dolly.position.z - hz;
+          dolly.position.x = hx + ox * c + oz * s2;
+          dolly.position.z = hz - ox * s2 + oz * c;
+          dolly.rotation.y += a;
+        }
+      } else vrTurnLatch = false;
+      const mv = new THREE.Vector3();
+      if (Math.abs(mx) > 0.15) mv.addScaledVector(rgt, mx * sp);
+      if (Math.abs(mz) > 0.15) mv.addScaledVector(fwd, -mz * sp);
+      if (keys['w'] || keys['arrowup']) mv.addScaledVector(fwd, sp);
+      if (keys['s'] || keys['arrowdown']) mv.addScaledVector(fwd, -sp);
+      if (keys['a'] || keys['arrowleft']) mv.addScaledVector(rgt, -sp);
+      if (keys['d'] || keys['arrowright']) mv.addScaledVector(rgt, sp);
+      dolly.position.add(mv);
+      // 충돌은 머리(월드) 위치 기준으로 계산하고, 밀린 만큼 돌리를 보정
+      camera.updateMatrixWorld();
+      const head = new THREE.Vector3(camera.matrixWorld.elements[12], 0, camera.matrixWorld.elements[14]);
+      const hx0 = head.x, hz0 = head.z;
+      collide(head);
+      dolly.position.x += head.x - hx0; dolly.position.z += head.z - hz0;
     } else {
       const sp = 3.6 * dt * state.space.speed;
       fwd.set(-Math.sin(yaw), 0, -Math.cos(yaw));
@@ -1832,18 +2274,23 @@ function renderWalkthrough(g, items){
     walkView.x = camera.position.x; walkView.z = camera.position.z;
     walkView.yaw = yaw; walkView.pitch = pitch; walkView.valid = true;
     // 바라보는 작품 정보 카드
-    if (lookCard && !tour.on && (++frame % 12 === 0)){
+    if (lookCard && !tour.on && !moveState && ctxEl.hidden && (++frame % 12 === 0)){
       camera.getWorldDirection(cdir);
-      ray.set(camera.position, cdir);
+      camera.getWorldPosition(camW);
+      ray.set(camW, cdir);
       ray.far = 11;
       const hit = ray.intersectObjects(photoMeshes)[0];
+      ray.far = Infinity;
       if (hit){
         const it = items[hit.object.userData.index];
+        const sk = frameSoundOf(it, hit.object.userData.index);
+        const sl = amb.frame && FRAME_SOUNDS[sk] ? ` · ${FRAME_SOUNDS[sk].label}` : '';
         lookCard.hidden = false;
-        lookCard.innerHTML = `<b>No.${hit.object.userData.index + 1} ${esc(it.title)}</b><span>${esc(state.config.artist)} · ${esc(state.config.year)}${it.type === 'video' ? ' · 영상' : ''}</span>`;
+        lookCard.innerHTML = `<b>No.${hit.object.userData.index + 1} ${esc(it.title)}</b><span>${esc(state.config.artist)} · ${esc(state.config.year)}${it.type === 'video' ? ' · 영상' : ''}${sl}</span>`;
       } else lookCard.hidden = true;
-    } else if (lookCard && tour.on) lookCard.hidden = true;
-    ambienceUpdate(camera, yaw, pitch);
+    } else if (lookCard && (tour.on || moveState || !ctxEl.hidden)) lookCard.hidden = true;
+    ambienceUpdate(camera);
+    if (++sndFrame % 6 === 0) fsnd.tick(_ambP);
     renderer.render(scene, camera);
     if (!useXRLoop) raf = requestAnimationFrame(animate);
   };
@@ -1872,6 +2319,13 @@ function renderWalkthrough(g, items){
     window.removeEventListener('resize', onResize);
     document.removeEventListener('fullscreenchange', onResize);
     el.removeEventListener('click', onClick);
+    el.removeEventListener('contextmenu', onCtxMenu);
+    el.removeEventListener('pointermove', onHoverMove);
+    document.removeEventListener('pointerdown', onDocDown, true);
+    document.removeEventListener('fullscreenchange', syncFullBtn);
+    clearTimeout(pressTimer);
+    fsnd.dispose();
+    if (joyMove) window.removeEventListener('touchmove', joyMove);
     if (walkJoyCleanup){ window.removeEventListener('touchend', walkJoyCleanup); window.removeEventListener('touchcancel', walkJoyCleanup); walkJoyCleanup = null; }
     if (joyEl && joyEl.parentNode) joyEl.parentNode.removeChild(joyEl);
     const sharedGeo = new Set([...Object.values(geoCache), frameGeo, photoGeo]);
@@ -2275,6 +2729,16 @@ function init(){
   $('#setChimeToggle').addEventListener('click', () => {
     amb.chime = !amb.chime; syncAmbUI(); saveSpace();
     toast(amb.chime ? '공간 차임을 켰어요' : '공간 차임을 껐어요');
+  });
+  $('#setFrameSndToggle').addEventListener('click', () => {
+    frameSoundSet(!amb.frame); syncAmbUI();
+    toast(amb.frame ? '작품 사운드를 켰어요' : '작품 사운드를 껐어요');
+  });
+  $('#setPlaceReset').addEventListener('click', () => {
+    const key = state.space.customGLB ? null : (state.space.layout || 'serpentine');
+    if (!key){ toast('직접 가져온 3D 공간은 🗑️(걸기 모드)로 치울 수 있어요'); return; }
+    if (state.space.place && state.space.place[key]){ delete state.space.place[key]; saveSpace(); renderGallery(); toast('옮긴 액자를 모두 원래 자리로 돌렸어요'); }
+    else toast('옮긴 액자가 없어요');
   });
   $('#btnEditClose').addEventListener('click', closeEditModal);
   $('#editModal').addEventListener('click', e => { if (e.target.id === 'editModal') closeEditModal(); });
