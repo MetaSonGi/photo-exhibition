@@ -259,7 +259,11 @@ async function loadConfig(){
   }catch(e){}
   try{
     const sp = JSON.parse(localStorage.getItem('ex_space_' + slug(c.title)) || 'null');
-    if (sp){ if (sp.light > 0) state.space.light = sp.light; if (sp.speed > 0) state.space.speed = sp.speed; }
+    if (sp){
+      if (sp.light > 0) state.space.light = sp.light; if (sp.speed > 0) state.space.speed = sp.speed;
+      if (sp.layout && LAYOUTS[sp.layout]) state.space.layout = sp.layout;
+      if (sp.frames && typeof sp.frames === 'object') state.space.frames = sp.frames;
+    }
     const au = JSON.parse(localStorage.getItem('ex_amb_' + slug(c.title)) || 'null');
     if (au){ if (typeof au.on === 'boolean') amb.on = au.on; if (au.vol >= 0) amb.vol = au.vol; if (typeof au.chime === 'boolean') amb.chime = au.chime; if (typeof au.mode === 'string') amb.mode = au.mode; }
   }catch(e){}
@@ -278,6 +282,15 @@ function saveSpace(){
   }catch(e){}
 }
 
+const FRAME_STYLES = {
+  black:  { label: '블랙',   c: 0x191919, r: .5,  m: .25 },
+  white:  { label: '화이트', c: 0xf2efe8, r: .6,  m: .05 },
+  wood:   { label: '우드',   c: 0x6b4528, r: .75, m: .05 },
+  oak:    { label: '오크',   c: 0xb08a5a, r: .7,  m: .05 },
+  gold:   { label: '골드',   c: 0xd4ad3a, r: .35, m: .3 },
+  silver: { label: '실버',   c: 0xc4c8ce, r: .35, m: .3 },
+  none:   { label: '액자 없음', c: 0x000000, r: 1, m: 0 },
+};
 const LAYOUTS = { serpentine:'서펜타인 홀', atrium:'아트리움', rotunda:'로툰다', maze:'미로', palace:'궁전', cathedral:'성당' };
 const glbCache = {}; // 공간 모델명 -> dataURL (메모리)
 let hungIdsClear = () => {};
@@ -401,7 +414,7 @@ function blobToRawDataURL(blobUrl){
 async function exportExhibition(){
   const c = state.config;
   toast('공유용 전시 파일 만드는 중...');
-  const items = [];
+  const items = [], exIdx = {};
   let embedded = 0, embeddedModel = 0, skippedVideo = 0, skippedBig = 0, failed = 0;
   for (const it of state.items){
     const url = it.url || '';
@@ -416,12 +429,21 @@ async function exportExhibition(){
         catch(e){ failed++; continue; }
       }
     }
+    exIdx[it.id] = items.length;
     items.push({ name: it.name, title: it.title, desc: it.desc, url: out, type: it.type, source: it.source });
+  }
+  // 액자 배치 커스텀은 작품 순번 기준으로 저장 (가져올 때 id가 새로 매겨지므로)
+  const frames = {};
+  for (const [k, m] of Object.entries(state.space.frames || {})){
+    const out2 = {};
+    for (const [id, o] of Object.entries(m || {})) if (id in exIdx) out2[exIdx[id]] = o;
+    if (Object.keys(out2).length) frames[k] = out2;
   }
   const data = {
     app: 'photo-exhibition', version: 1, exportedAt: new Date().toISOString(),
     config: { title: $('#exTitle').textContent.trim(), subtitle: c.subtitle, artist: c.artist, bio: c.bio, contact: c.contact, year: c.year },
     criteria: state.criteria,
+    space: { layout: state.space.layout, frames },
     items,
   };
   const json = JSON.stringify(data);
@@ -454,6 +476,16 @@ function importExhibition(file){
         id: 'w' + (++state.seq), name: it.name || '', title: it.title || prettyTitle(it.name),
         desc: it.desc || '', url: it.url, type: it.type === 'video' ? 'video' : it.type === 'model' ? 'model' : 'image', source: it.source || 'import',
       }));
+      const ds = data.space || {};
+      if (ds.layout && LAYOUTS[ds.layout]) state.space.layout = ds.layout;
+      state.space.frames = {};
+      for (const [k, m] of Object.entries(ds.frames || {})){
+        const out2 = {};
+        for (const [i, o] of Object.entries(m || {})) if (state.items[+i]) out2[state.items[+i].id] = o;
+        state.space.frames[k] = out2;
+      }
+      walkView.valid = false;
+      saveSpace();
       $('#infoModal').hidden = true;
       renderAll();
       toast(`${state.items.length}점을 불러왔어요`);
@@ -1002,6 +1034,7 @@ function renderWalkthrough(g, items){
       <button class="btn sm" id="btnTour">🎧 도슨트 투어</button>
       <button class="btn sm" id="btnSpace">⚙️ 공간 설정</button>
       <button class="btn sm" id="btnEdit">📝 작품 편집</button>
+      <button class="btn sm" id="btnArrange" title="마우스로 액자 위치·크기·스타일 바꾸기">✋ 액자 편집</button>
       <button class="btn sm" id="btnWalkHelp">❔ 조작법</button>
       <button class="btn sm" id="btnFull">⛶ 전체화면</button>
       <button class="btn sm" id="btnVR">🥽 VR</button>
@@ -1026,7 +1059,8 @@ function renderWalkthrough(g, items){
       <div class="walk-loading-t">🖼️ 전시장을 준비하는 중…</div>
       <div class="walk-loading-bar"><div id="walkBar"></div></div>
     </div>
-    <div class="walk-lookcard" id="walkLook" hidden></div>`;
+    <div class="walk-lookcard" id="walkLook" hidden></div>
+    <div class="arr-panel" id="arrPanel" hidden></div>`;
   // 전체화면 상태에서도 초기 높이를 onResize와 동일하게 계산해야 함
   // (편집 모달 닫기·설정 변경 시 renderGallery가 3D 뷰를 재생성하는데,
   //  여기서 전체화면을 무시하면 캔버스가 innerHeight-170으로 줄어든 채 남음)
@@ -1229,9 +1263,11 @@ function renderWalkthrough(g, items){
   }
   const wallMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .95, map: tiledTex(wallCv, 5, 1.4) });
   const wallMatOuter = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .95, map: tiledTex(wallCv, 30, 3) });
+  const wallMeshes = []; // 액자 편집: 액자를 붙일 수 있는 벽면
   const mkWall = (w, h, x, y, z, ry) => {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), wallMatOuter);
     m.position.set(x, y, z); m.rotation.y = ry; scene.add(m);
+    m.userData.top = h; wallMeshes.push(m);
   };
   if (!useCustom){
     mkWall(hallW, HH, 0, HH/2, -hd, 0);
@@ -1263,6 +1299,37 @@ function renderWalkthrough(g, items){
   const colliders = [];
   const photoMeshes = [];
   const waypoints = [];
+  /* 액자 커스텀: 레이아웃별로 작품 id -> {x,y,z,ry,s,style,mat,hidden} 저장 */
+  const frameKey = useCustom ? 'custom:' + customName : layout;
+  const ovAll = () => { const f = (state.space.frames = state.space.frames || {}); return (f[frameKey] = f[frameKey] || {}); };
+  const frameMats = { black: frameMat };
+  const frameMatOf = st => {
+    if (frameMats[st]) return frameMats[st];
+    const d = FRAME_STYLES[st] || FRAME_STYLES.black;
+    return (frameMats[st] = new THREE.MeshStandardMaterial({ color: d.c, roughness: d.r, metalness: d.m }));
+  };
+  const matGeo = new THREE.PlaneGeometry(FW, FH);
+  const matMat = new THREE.MeshStandardMaterial({ color: 0xf6f3ec, roughness: .95 });
+  const frameRecs = new Map(); // itemId -> { grp, frame, photo, matMesh, it, base, wp }
+  const applyFrame = rec => {
+    const o = ovAll()[rec.it.id] || {};
+    const g2 = rec.grp;
+    g2.position.set(o.x ?? rec.base.x, o.y ?? ART_Y, o.z ?? rec.base.z);
+    g2.rotation.y = o.ry ?? rec.base.ry;
+    g2.scale.setScalar(o.s || 1);
+    const st = o.style || 'black';
+    rec.frame.visible = st !== 'none';
+    if (st !== 'none') rec.frame.material = frameMatOf(st);
+    rec.matMesh.visible = !!o.mat;
+    rec.photo.scale.setScalar(o.mat ? 0.8 : 1);
+    g2.visible = !o.hidden;
+    g2.updateMatrixWorld(true);
+    const nrm = new THREE.Vector3(0, 0, 1).applyEuler(g2.rotation);
+    rec.wp.cam.copy(g2.position).add(nrm.multiplyScalar(3.1 * Math.max(1, (o.s || 1) * 0.85))).setY(EYE);
+    rec.wp.look.copy(g2.position);
+    rec.wp.skip = !!o.hidden;
+  };
+  const visibleHit = hits => hits.find(h => h.object.userData.grp ? h.object.userData.grp.visible : true);
 
   const badgeTex = (() => {
     const cv = document.createElement('canvas'); cv.width = 256; cv.height = 160;
@@ -1334,9 +1401,12 @@ function renderWalkthrough(g, items){
     grp.position.set(x, ART_Y, z);
     grp.rotation.y = ry;
     const frame = new THREE.Mesh(frameGeo, frameMat); grp.add(frame);
+    frame.userData.itemId = it.id; frame.userData.grp = grp;
+    const matMesh = new THREE.Mesh(matGeo, matMat); matMesh.position.z = 0.038; matMesh.visible = false; grp.add(matMesh);
     const mat = new THREE.MeshBasicMaterial({ color: 0x2a2a2e });
     const photo = new THREE.Mesh(photoGeo, mat);
     photo.position.z = 0.045; photo.userData.itemId = it.id; photo.userData.index = items.indexOf(it);
+    photo.userData.grp = grp;
     grp.add(photo); photoMeshes.push(photo);
     if (it.type === 'image'){
       texCount++;
@@ -1367,18 +1437,20 @@ function renderWalkthrough(g, items){
       new THREE.PlaneGeometry(0.62, 0.135),
       new THREE.MeshBasicMaterial({ map: plateTex }));
     plate.position.set(0, -(FH/2 + 0.24), 0.045); grp.add(plate);
+    plate.userData.itemId = it.id; plate.userData.grp = grp;
     scene.add(grp);
-    const normal = new THREE.Vector3(0, 0, 1).applyEuler(grp.rotation);
-    waypoints.push({
-      cam: grp.position.clone().add(normal.clone().multiplyScalar(3.1)).setY(EYE),
-      look: grp.position.clone(),
-    });
+    const wp = { cam: new THREE.Vector3(), look: new THREE.Vector3() };
+    waypoints.push(wp);
+    const rec = { grp, frame, photo, matMesh, it, base: { x, z, ry }, wp };
+    frameRecs.set(it.id, rec);
+    applyFrame(rec);
   };
   outer:
   for (const seg of wallSegs){
     const ry = seg.ry || 0;
     const wall = new THREE.Mesh(wallGeoOf(seg.len), wallMat);
     wall.position.set(seg.cx, SEG_H / 2, seg.cz); wall.rotation.y = ry; scene.add(wall);
+    wall.userData.top = SEG_H; wall.userData.box = true; wallMeshes.push(wall);
     colliders.push({ cx: seg.cx, cz: seg.cz, len: seg.len, ry });
     const perSide = Math.max(2, Math.floor(seg.len / SPACING));
     const cosR = Math.cos(ry), sinR = Math.sin(ry);
@@ -1525,14 +1597,19 @@ function renderWalkthrough(g, items){
   let dragging = false, lx = 0, ly = 0, moved = 0;
   const keys = {};
   const el = renderer.domElement;
-  const pDown = e => { dragging = true; lx = e.clientX; ly = e.clientY; moved = 0; stopTour(); };
+  const pDown = e => {
+    moved = 0; stopTour();
+    if (arrange && arrangeDown(e)) return;
+    dragging = true; lx = e.clientX; ly = e.clientY;
+  };
   const pMove = e => {
+    if (fDrag){ arrangeMove(e); return; }
     if (!dragging) return;
     const dx = e.clientX - lx, dy = e.clientY - ly; lx = e.clientX; ly = e.clientY;
     moved += Math.abs(dx) + Math.abs(dy);
     yaw -= dx * 0.004; pitch = Math.max(-1.1, Math.min(1.1, pitch - dy * 0.004));
   };
-  const pUp = () => dragging = false;
+  const pUp = () => { dragging = false; if (fDrag) arrangeUp(); };
   el.addEventListener('pointerdown', pDown);
   window.addEventListener('pointermove', pMove);
   window.addEventListener('pointerup', pUp);
@@ -1615,7 +1692,7 @@ function renderWalkthrough(g, items){
   if (btnHang){
     btnHang.hidden = !useCustom;
     btnHang.addEventListener('click', () => {
-      hangMode = !hangMode; updateHangUI();
+      hangMode = !hangMode; if (hangMode && arrange) setArrange(false); updateHangUI();
       toast(hangMode ? '벽을 클릭하면 작품이 걸려요 (한 번에 최대 8점)' : '걸기 모드를 껐어요');
     });
   }
@@ -1652,16 +1729,213 @@ function renderWalkthrough(g, items){
     toast(`${perClick}점을 걸었어요 (남은 ${remaining.length - perClick}점)`);
   };
   const onClick = e => {
+    if (arrange){ if (downEmpty && moved <= 10) selectFrame(null); return; }
     if (moved > 10) return;
     if (hangMode && useCustom){ doHangClick(e); return; }
     const r = el.getBoundingClientRect();
     ptr.x = ((e.clientX - r.left) / r.width) * 2 - 1;
     ptr.y = -((e.clientY - r.top) / r.height) * 2 + 1;
     ray.setFromCamera(ptr, camera);
-    const hit = ray.intersectObjects(photoMeshes)[0];
+    const hit = visibleHit(ray.intersectObjects(photoMeshes));
     if (hit) openLightbox(hit.object.userData.itemId);
   };
   el.addEventListener('click', onClick);
+
+  /* ---------- ✋ 액자 편집 모드: 드래그로 이동 · 크기 · 높이 · 액자 스타일 ---------- */
+  let arrange = false, sel = null, fDrag = null, downEmpty = false;
+  const undoStack = [];
+  const pushUndo = () => { undoStack.push(JSON.stringify(ovAll())); if (undoStack.length > 60) undoStack.shift(); };
+  const ovOf = id => (ovAll()[id] = ovAll()[id] || {});
+  const selMesh = new THREE.Mesh(new THREE.PlaneGeometry(FW + 0.42, FH + 0.62),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(state.config.accent || '#c9a227'), transparent: true, opacity: 0.6, depthWrite: false }));
+  selMesh.position.set(0, -0.12, -0.01);
+  const pickMeshes = () => { const a = []; frameRecs.forEach(r => { if (r.grp.visible) a.push(r.photo, r.frame); }); return a; };
+  const setPtr = e => {
+    const r = el.getBoundingClientRect();
+    ptr.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+    ptr.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+    ray.far = Infinity;
+    ray.setFromCamera(ptr, camera);
+  };
+  const selectFrame = rec => {
+    sel = rec;
+    if (selMesh.parent) selMesh.parent.remove(selMesh);
+    if (rec) rec.grp.add(selMesh);
+    renderArrPanel();
+  };
+  const arrangeDown = e => {
+    downEmpty = false;
+    setPtr(e);
+    const hit = ray.intersectObjects(pickMeshes(), false)[0];
+    if (!hit){ downEmpty = true; return false; }
+    const rec = frameRecs.get(hit.object.userData.itemId);
+    if (!rec) return false;
+    if (sel !== rec) selectFrame(rec);
+    fDrag = { rec, pushed: false };
+    el.style.cursor = 'grabbing';
+    return true;
+  };
+  const wallTargets = () => useCustom ? wallMeshes.concat(customMeshes) : wallMeshes;
+  const arrangeMove = e => {
+    moved += 3;
+    setPtr(e);
+    const hits = ray.intersectObjects(wallTargets(), false);
+    const hit = hits.find(h => {
+      if (!h.face) return false;
+      if (h.object.userData.box && Math.abs(h.face.normal.x) > 0.5) return false; // 파티션 끝단면 제외
+      const n = h.face.normal.clone().transformDirection(h.object.matrixWorld);
+      return Math.abs(n.y) < 0.5;
+    });
+    if (!hit) return;
+    const n = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+    n.y = 0; n.normalize();
+    if (!fDrag.pushed){ pushUndo(); fDrag.pushed = true; }
+    const o = ovOf(fDrag.rec.it.id), s = o.s || 1;
+    const top = hit.object.userData.top || HH;
+    const yMin = (FH / 2 + 0.45) * s, yMax = Math.max(yMin, top - (FH / 2 + 0.12) * s);
+    o.x = +(hit.point.x + n.x * 0.06).toFixed(3);
+    o.z = +(hit.point.z + n.z * 0.06).toFixed(3);
+    o.y = +Math.max(yMin, Math.min(yMax, hit.point.y)).toFixed(3);
+    o.ry = +Math.atan2(n.x, n.z).toFixed(4);
+    o.top = top;
+    applyFrame(fDrag.rec);
+    syncArrSliders();
+  };
+  const arrangeUp = () => {
+    if (fDrag && fDrag.pushed){ saveSpace(); }
+    fDrag = null;
+    el.style.cursor = arrange ? 'pointer' : '';
+  };
+  const changeSel = (fn, save = true) => {
+    if (!sel) return;
+    pushUndo(); fn(ovOf(sel.it.id)); applyFrame(sel);
+    if (save) saveSpace();
+    renderArrPanel();
+  };
+  const onWheel = e => {
+    if (!arrange || !sel) return;
+    e.preventDefault();
+    changeSel(o => { o.s = +Math.max(0.5, Math.min(2.5, (o.s || 1) * (e.deltaY < 0 ? 1.06 : 1 / 1.06))).toFixed(3); });
+  };
+  el.addEventListener('wheel', onWheel, { passive: false });
+  const undo = () => {
+    if (!undoStack.length){ toast('되돌릴 작업이 없어요'); return; }
+    state.space.frames[frameKey] = JSON.parse(undoStack.pop());
+    frameRecs.forEach(applyFrame);
+    if (sel && !sel.grp.visible) selectFrame(null);
+    saveSpace(); renderArrPanel();
+  };
+  const arrPanel = $('#arrPanel');
+  const syncArrSliders = () => {
+    if (!sel || !arrPanel) return;
+    const o = ovAll()[sel.it.id] || {};
+    const sz = arrPanel.querySelector('[data-k="s"]'), hy = arrPanel.querySelector('[data-k="y"]');
+    if (sz){ sz.value = Math.round((o.s || 1) * 100); sz.nextElementSibling.textContent = sz.value + '%'; }
+    if (hy){ hy.value = Math.round((o.y ?? ART_Y) * 100); hy.nextElementSibling.textContent = (hy.value / 100).toFixed(2) + 'm'; }
+  };
+  function renderArrPanel(){
+    if (!arrPanel) return;
+    arrPanel.hidden = !arrange;
+    if (!arrange) return;
+    const all = ovAll();
+    const hiddenN = Object.keys(all).filter(id => all[id].hidden && frameRecs.has(id)).length;
+    let body;
+    if (sel){
+      const o = all[sel.it.id] || {};
+      const st = o.style || 'black';
+      body = `
+        <div class="arr-sel">No.${items.indexOf(sel.it) + 1} <b>${esc(sel.it.title || '무제')}</b></div>
+        <label class="arr-row"><span>크기</span><input type="range" data-k="s" min="50" max="250" step="5" value="${Math.round((o.s || 1) * 100)}"><em>${Math.round((o.s || 1) * 100)}%</em></label>
+        <label class="arr-row"><span>높이</span><input type="range" data-k="y" min="80" max="${Math.round(((o.top || HH) - 0.5) * 100)}" step="5" value="${Math.round((o.y ?? ART_Y) * 100)}"><em>${(o.y ?? ART_Y).toFixed(2)}m</em></label>
+        <div class="arr-row"><span>액자</span><div class="arr-styles">${Object.entries(FRAME_STYLES).map(([k, d]) =>
+          `<button class="arr-sw${k === st ? ' on' : ''}" data-style="${k}" title="${d.label}" style="--sw:${k === 'none' ? 'transparent' : hexCss(d.c)}">${k === 'none' ? '∅' : ''}</button>`).join('')}</div></div>
+        <div class="arr-row"><span>매트</span><button class="btn sm${o.mat ? ' primary' : ''}" data-act="mat">${o.mat ? '흰 매트 있음' : '매트 없음'}</button>
+          <button class="btn sm ghost" data-act="styleAll" title="이 액자 스타일·매트를 모든 작품에 적용">전체 적용</button></div>
+        <div class="arr-btns">
+          <button class="btn sm" data-act="reset">↺ 원위치</button>
+          <button class="btn sm" data-act="hide">🙈 내리기</button>
+          <button class="btn sm" data-act="view">🔍 크게 보기</button>
+        </div>`;
+    } else {
+      body = `<p class="arr-hint">액자를 <b>클릭</b>하면 선택되고, <b>끌면</b> 벽을 따라 원하는 곳으로 옮겨져요.<br>다른 벽·파티션 반대면으로도 옮길 수 있어요.<br>선택 후 <b>마우스 휠</b>: 크기 · <b>Delete</b>: 내리기 · <b>Ctrl+Z</b>: 되돌리기</p>`;
+    }
+    arrPanel.innerHTML = `
+      <div class="arr-head"><b>✋ 액자 편집</b><button class="btn sm ghost" data-act="done">완료</button></div>
+      ${body}
+      <div class="arr-foot">
+        <button class="btn sm ghost" data-act="undo" ${undoStack.length ? '' : 'disabled'}>↶ 되돌리기</button>
+        ${hiddenN ? `<button class="btn sm ghost" data-act="unhide">내린 ${hiddenN}점 다시 걸기</button>` : ''}
+        <button class="btn sm ghost" data-act="resetAll">전체 초기화</button>
+      </div>`;
+  }
+  if (arrPanel){
+    ['pointerdown', 'wheel', 'click'].forEach(t => arrPanel.addEventListener(t, e => e.stopPropagation()));
+    arrPanel.addEventListener('input', e => {
+      const k = e.target.dataset.k;
+      if (!k || !sel) return;
+      const o = ovOf(sel.it.id);
+      if (!e.target.dataset.pushed){ pushUndo(); e.target.dataset.pushed = '1'; }
+      if (k === 's') o.s = +e.target.value / 100;
+      if (k === 'y') o.y = +e.target.value / 100;
+      applyFrame(sel); syncArrSliders();
+    });
+    arrPanel.addEventListener('change', e => { if (e.target.dataset.k){ delete e.target.dataset.pushed; saveSpace(); renderArrPanel(); } });
+    arrPanel.addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.style){ changeSel(o => { if (b.dataset.style === 'black') delete o.style; else o.style = b.dataset.style; }); return; }
+      const act = b.dataset.act;
+      if (act === 'done') setArrange(false);
+      else if (act === 'mat') changeSel(o => { o.mat = !o.mat; });
+      else if (act === 'styleAll' && sel){
+        pushUndo();
+        const src = ovAll()[sel.it.id] || {};
+        frameRecs.forEach(r => { const o = ovOf(r.it.id); o.style = src.style; o.mat = src.mat; if (!o.style) delete o.style; if (!o.mat) delete o.mat; applyFrame(r); });
+        saveSpace(); renderArrPanel(); toast('모든 액자에 같은 스타일을 적용했어요');
+      }
+      else if (act === 'reset') changeSel(o => { ['x', 'y', 'z', 'ry', 's', 'top'].forEach(k => delete o[k]); });
+      else if (act === 'hide'){ const t = sel?.it.title; changeSel(o => { o.hidden = true; }); selectFrame(null); toast(`'${t || '무제'}'을(를) 벽에서 내렸어요`); }
+      else if (act === 'view' && sel) openLightbox(sel.it.id);
+      else if (act === 'undo') undo();
+      else if (act === 'unhide'){
+        pushUndo();
+        const all = ovAll(); Object.values(all).forEach(o => { delete o.hidden; });
+        frameRecs.forEach(applyFrame); saveSpace(); renderArrPanel();
+      }
+      else if (act === 'resetAll'){
+        if (!confirmReset){ confirmReset = true; b.textContent = '정말 초기화할까요?'; setTimeout(() => { confirmReset = false; }, 3000); return; }
+        confirmReset = false;
+        pushUndo(); state.space.frames[frameKey] = {};
+        frameRecs.forEach(applyFrame); selectFrame(null); saveSpace();
+        toast('이 배치의 액자를 모두 처음 상태로 되돌렸어요 (↶ 되돌리기 가능)');
+      }
+    });
+  }
+  let confirmReset = false;
+  const setArrange = on => {
+    arrange = on;
+    if (on){ stopTour(); if (hangMode){ hangMode = false; updateHangUI(); } }
+    else selectFrame(null);
+    const b = $('#btnArrange');
+    if (b){ b.textContent = on ? '✅ 편집 완료' : '✋ 액자 편집'; b.classList.toggle('primary', on); }
+    el.style.cursor = on ? 'pointer' : '';
+    renderArrPanel();
+    if (on) toast('액자를 끌어서 옮기고, 클릭해서 크기·스타일을 바꿔보세요');
+  };
+  $('#btnArrange').addEventListener('click', e => {
+    e.stopPropagation();
+    if (!frameRecs.size){ toast('편집할 액자가 없어요'); return; }
+    setArrange(!arrange);
+  });
+  const arrKey = e => {
+    if (!arrange) return;
+    if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName) && e.target.type !== 'range') return;
+    if (e.target && e.target.isContentEditable) return;
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z'){ e.preventDefault(); undo(); return; }
+    if (!sel) return;
+    if (e.key === 'Delete' || e.key === 'Backspace'){ e.preventDefault(); const t = sel.it.title; changeSel(o => { o.hidden = true; }); selectFrame(null); toast(`'${t || '무제'}'을(를) 벽에서 내렸어요`); }
+    else if (e.key === 'Escape') selectFrame(null);
+  };
+  window.addEventListener('keydown', arrKey);
 
   // 도슨트 투어
   const tour = { on:false, i:0, phase:'move', t:0, from:new THREE.Vector3(), fromLook:new THREE.Vector3() };
@@ -1672,7 +1946,7 @@ function renderWalkthrough(g, items){
     tour.on = !tour.on;
     $('#btnTour').textContent = tour.on ? '⏸ 투어 정지' : '🎧 도슨트 투어';
     if (tour.on){
-      tour.i = 0; tour.phase = 'move'; tour.t = 0;
+      tour.i = Math.max(0, waypoints.findIndex(w => !w.skip)); tour.phase = 'move'; tour.t = 0;
       tour.from.copy(camera.position);
       tour.fromLook.copy(lookTarget);
     }
@@ -1781,7 +2055,10 @@ function renderWalkthrough(g, items){
         lookTarget.lerpVectors(tour.fromLook, wp.look, e2);
         if (k >= 1){ tour.phase = 'hold'; tour.t = 0; }
       } else if (tour.t > 2.8){
-        tour.i = (tour.i + 1) % waypoints.length;
+        for (let n = 0; n < waypoints.length; n++){
+          tour.i = (tour.i + 1) % waypoints.length;
+          if (!waypoints[tour.i].skip) break;
+        }
         tour.phase = 'move'; tour.t = 0;
         tour.from.copy(camera.position); tour.fromLook.copy(lookTarget);
       }
@@ -1836,7 +2113,7 @@ function renderWalkthrough(g, items){
       camera.getWorldDirection(cdir);
       ray.set(camera.position, cdir);
       ray.far = 11;
-      const hit = ray.intersectObjects(photoMeshes)[0];
+      const hit = visibleHit(ray.intersectObjects(photoMeshes));
       if (hit){
         const it = items[hit.object.userData.index];
         lookCard.hidden = false;
@@ -1872,10 +2149,14 @@ function renderWalkthrough(g, items){
     window.removeEventListener('resize', onResize);
     document.removeEventListener('fullscreenchange', onResize);
     el.removeEventListener('click', onClick);
+    el.removeEventListener('wheel', onWheel);
+    window.removeEventListener('keydown', arrKey);
     if (walkJoyCleanup){ window.removeEventListener('touchend', walkJoyCleanup); window.removeEventListener('touchcancel', walkJoyCleanup); walkJoyCleanup = null; }
     if (joyEl && joyEl.parentNode) joyEl.parentNode.removeChild(joyEl);
-    const sharedGeo = new Set([...Object.values(geoCache), frameGeo, photoGeo]);
-    const sharedMat = new Set([frameMat, wallMat, wallMatOuter, floorMat, stripMat, glowMat]);
+    if (selMesh.parent) selMesh.parent.remove(selMesh);
+    selMesh.geometry.dispose(); selMesh.material.dispose();
+    const sharedGeo = new Set([...Object.values(geoCache), frameGeo, photoGeo, matGeo]);
+    const sharedMat = new Set([frameMat, wallMat, wallMatOuter, floorMat, stripMat, glowMat, matMat, ...Object.values(frameMats)]);
     scene.traverse(o => {
       if (o.geometry && !sharedGeo.has(o.geometry)) o.geometry.dispose();
       if (o.material){ [].concat(o.material).forEach(m => { m.map?.dispose?.(); if (!sharedMat.has(m)) m.dispose(); }); }
